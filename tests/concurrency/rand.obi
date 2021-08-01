@@ -1,0 +1,16 @@
+Fibers.all(range(5).each fun(n) ~{
+    sleep(1 - n / 1000)
+    println(n)
+})
+// 4
+// 3
+// 2
+// 1
+// 0
+
+
+
+Pipe (Channel)
+tee Pipes
+tap
+fix

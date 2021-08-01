@@ -1,0 +1,18 @@
+println(#{ foo: "bar" })
+// expect: #{foo:"bar"}
+println(Json.stringify(#{ foo: "bar" }))
+// expect: "{\"foo\":\"bar\"}"
+
+{
+  country: ({ what })(),
+
+}
+
+
+data := #{
+  foo: "bar",
+  "baz": {
+    "quux": 2,
+    arr: [1, 2, 3]
+  }
+}
