@@ -162,6 +162,7 @@ export module stmt {
   export type Visitor<T> = {
     visitBlockStmt: (exp: Block) => T;
     visitExpressionStmt: (exp: Expression) => T;
+    visitReturnStmt: (exp: Return) => T;
     visitVarStmt: (exp: Var) => T;
   };
   export class Block extends Stmt {
@@ -184,6 +185,19 @@ export module stmt {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitExpressionStmt(this);
+    }
+  }
+  export class Return extends Stmt {
+    keyword: Token;
+    value: Expr | null;
+
+    constructor(keyword: Token, value: Expr | null) {
+      super();
+      this.keyword = keyword;
+      this.value = value;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitReturnStmt(this);
     }
   }
   export class Var extends Stmt {

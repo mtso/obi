@@ -108,3 +108,49 @@ a := 5 == 4;
 a == 5 match ( 5 -> print("5"); )
 
 match 5 ( )
+
+# edge cases with trailer and classes
+
+foo.(bar)() {
+
+}
+
+foo.(Iter)() {
+
+}
+
+foo.iter() fun(item) { getStuff }
+
+type Foo { init() {
+
+} }
+
+foo = Foo(a, b); foo.(b)() { what }
+
+html() { what }
+
+// html {
+
+}
+
+// trailer on method foo.html {
+
+}
+
+// chained GETs foo.route("/").handler("GET") {
+
+}
+
+html() { head() { link(1, 2); }; };
+
+// trailing on init Foo() {
+
+}
+
+class Table { fields: Map<string, any>; methods: Map<string, any>; } fun Foo(a,
+b) { _a := a; [ get a = fun() { _a; }, set a = fun(val) { _a = val; }, printA =
+fun () { print(a); } ]; }
+
+foo.printA(); foo.a = 5;
+
+fun makeFoo() { kin Foo { print() { print("a"); } } Foo(); }

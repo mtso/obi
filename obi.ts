@@ -205,11 +205,11 @@ class ObiFunction extends Callable {
     try {
       return interpreter.executeBlock(this.declaration.body, environment);
     } catch (err) {
-      // if (err instanceof Return) {
-      // return (err as Return).value;
-      // } else {
-      throw err;
-      // }
+      if (err instanceof Return) {
+        return (err as Return).value;
+      } else {
+        throw err;
+      }
     }
     return null;
   }
@@ -230,6 +230,13 @@ class RuntimeError extends Error {
   constructor(token: Token, message: string) {
     super(message);
     this.token = token;
+  }
+}
+class Return extends Error {
+  value: any;
+  constructor(value: any) {
+    super();
+    this.value = value;
   }
 }
 
@@ -267,8 +274,8 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   //   // this.currentFunction = enclosingFunction;
   // }
   resolveFunction(func: expr.Function, type: FunctionType) {
-    // const enclosingFunction = this.currentFunction;
-    // this.currentFunction = type;
+    const enclosingFunction = this.currentFunction;
+    this.currentFunction = type;
     this.beginScope();
     for (const param of func.parameters) {
       this.declare(param);
@@ -276,7 +283,7 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     }
     this.resolveStmts(func.body);
     this.endScope();
-    // this.currentFunction = enclosingFunction;
+    this.currentFunction = enclosingFunction;
   }
 
   beginScope() {
@@ -318,6 +325,20 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   // }
   visitExpressionStmt(stm: stmt.Expression) {
     this.resolveExpr(stm.expression);
+  }
+  visitReturnStmt(stm: stmt.Return) {
+    if (this.currentFunction === FunctionType.NONE) {
+      Obi.errorToken(stm.keyword, "Can't return from top-level code.");
+    }
+    if (stm.value !== null) {
+      // if (this.currentFunction === FunctionType.INITIALIZER) {
+      //   Obi.errorToken(
+      //     stm.keyword,
+      //     "Can't return a value from an initializer.",
+      //   );
+      // }
+      this.resolveExpr(stm.value);
+    }
   }
   visitVarStmt(stm: stmt.Var) {
     this.declare(stm.name);
@@ -368,7 +389,10 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     for (let i = 0; i < exp.cases.length; i++) {
       const case_ = exp.cases[i];
       if (case_.isDefault && i !== exp.cases.length - 1) {
-        Obi.errorToken(exp.where, "Match branches after default case will never be reached.");
+        Obi.errorToken(
+          exp.where,
+          "Match branches after default case will never be reached.",
+        );
       }
       if (null !== case_.pattern) this.resolveExpr(case_.pattern);
       this.resolveStmt(case_.branch);
@@ -459,6 +483,11 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   // }
   visitExpressionStmt(stm: stmt.Expression): any {
     return this.evaluate(stm.expression);
+  }
+  visitReturnStmt(stm: stmt.Return) {
+    let value = null;
+    if (stm.value !== null) value = this.evaluate(stm.value);
+    throw new Return(value);
   }
   visitVarStmt(stm: stmt.Var): any {
     let value = null;
@@ -786,11 +815,7 @@ class Parser {
   // }
 
   private statement(): Stmt {
-    // if (this.match(TT.FOR)) return this.forStatement();
-    // if (this.match(TT.IF)) return this.ifStatement();
-    // if (this.match(TT.PRINT)) return this.printStatement();
-    // if (this.match(TT.RETURN)) return this.returnStatement();
-    // if (this.match(TT.WHILE)) return this.whileStatement();
+    if (this.match(TT.RETURN)) return this.returnStatement();
     if (this.match(TT.LEFT_BRACE)) return new stmt.Block(this.block());
     return this.expressionStatement();
   }
@@ -839,21 +864,15 @@ class Parser {
   //   return new stmt.If(condition, thenBranch, elseBranch);
   // }
 
-  // private printStatement(): Stmt {
-  //   const value = this.expression();
-  //   this.consume(TT.SEMICOLON, "Expect ';' after value.");
-  //   return new stmt.Print(value);
-  // }
-
-  // private returnStatement(): Stmt {
-  //   const keyword = this.previous();
-  //   let value = null;
-  //   if (!this.check(TT.SEMICOLON)) {
-  //     value = this.expression();
-  //   }
-  //   this.consume(TT.SEMICOLON, "Expect ';' after return value.");
-  //   return new stmt.Return(keyword, value);
-  // }
+  private returnStatement(): Stmt {
+    const keyword = this.previous();
+    let value = null;
+    if (!this.check(TT.SEMICOLON)) {
+      value = this.expression();
+    }
+    this.consume(TT.SEMICOLON, "Expect ';' after return value.");
+    return new stmt.Return(keyword, value);
+  }
 
   private varDeclaration() {
     const name = this.consume(TT.IDENTIFIER, "Expect variable name.");
@@ -1115,7 +1134,7 @@ class Parser {
   }
 
   table() {
-    const table : { [key: string] : any } = {};
+    const table: { [key: string]: any } = {};
     let index = 0;
 
     while (true) {
@@ -1144,7 +1163,8 @@ class Parser {
     if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
     if (this.match(TT.STRING)) return new expr.Literal(this.previous().literal);
 
-    if (this.match(TT.LEFT_BRACKET)) return new expr.Literal(this.table());
+    // Turn off list literals for now.
+    // if (this.match(TT.LEFT_BRACKET)) return new expr.Literal(this.table());
 
     // if (this.match(TT.SUPER)) {
     //   const keyword = this.previous();
@@ -1373,14 +1393,14 @@ class Scanner {
         this.addToken(TT.RIGHT_BRACE);
         this.column += 1;
         break;
-      case "[":
-        this.addToken(TT.LEFT_BRACKET);
-        this.column += 1;
-        break;
-      case "]":
-        this.addToken(TT.RIGHT_BRACKET);
-        this.column += 1;
-        break;
+      // case "[":
+      //   this.addToken(TT.LEFT_BRACKET);
+      //   this.column += 1;
+      //   break;
+      // case "]":
+      //   this.addToken(TT.RIGHT_BRACKET);
+      //   this.column += 1;
+      //   break;
       case ",":
         this.addToken(TT.COMMA);
         this.column += 1;

@@ -75,7 +75,7 @@ const defineAst = (baseName: string, types: string[]) => {
     // "Function   = name: Token, parameters: Token[], body: Stmt[]",
     // "If         = condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
     // "Print      = expression: Expr",
-    // "Return     = keyword: Token, value: Expr | null",
+    "Return     = keyword: Token, value: Expr | null",
     "Var        = name: Token, initializer: Expr",
     // "While      = condition: Expr, body: Stmt",
   ]);
