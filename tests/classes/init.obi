@@ -1,0 +1,12 @@
+class Foo {
+    init(name) {
+        this.name = name;
+    }
+
+    greet() {
+        print(this.name);
+    }
+}
+
+Foo("hello").greet();
+// expect: "hello"

@@ -184,6 +184,7 @@ enum FunctionType {
   NONE,
   FUNCTION,
   METHOD,
+  INITIALIZER,
 }
 
 class ObiFunction extends Callable {
@@ -268,10 +269,10 @@ class ObiClass extends Callable {
   }
   call(interpreter: Interpreter, args: any[]): any {
     const instance = new ObiInstance(this);
-    // const initializer = this.findMethod("init");
-    // if (null !== initializer) {
-    //   initializer.bind(instance).call(interpreter, args);
-    // }
+    const initializer = this.findMethod("init");
+    if (null !== initializer) {
+      initializer.bind(instance).call(interpreter, args);
+    }
     return instance;
   }
   arity(): number {
@@ -285,7 +286,6 @@ class ObiClass extends Callable {
 }
 
 class ObiInstance {
-  // private klass: LoxClass;
   klass: ObiClass;
   private fields: Map<string, any> = new Map<string, any>();
   constructor(klass: ObiClass) {
@@ -426,9 +426,9 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.scopes[this.scopes.length - 1].set("this", true);
     for (const method of stm.methods) {
       let declaration = FunctionType.METHOD;
-      // if (method.name.lexeme === "init") {
-      //   declaration = FunctionType.INITIALIZER;
-      // }
+      if (method.name && method.name.lexeme === "init") {
+        declaration = FunctionType.INITIALIZER;
+      }
       this.resolveFunction(method, declaration);
     }
     this.endScope();
@@ -445,12 +445,12 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
       Obi.errorToken(stm.keyword, "Can't return from top-level code.");
     }
     if (stm.value !== null) {
-      // if (this.currentFunction === FunctionType.INITIALIZER) {
-      //   Obi.errorToken(
-      //     stm.keyword,
-      //     "Can't return a value from an initializer.",
-      //   );
-      // }
+      if (this.currentFunction === FunctionType.INITIALIZER) {
+        Obi.errorToken(
+          stm.keyword,
+          "Can't return a value from an initializer.",
+        );
+      }
       this.resolveExpr(stm.value);
     }
   }
@@ -622,7 +622,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       const func = new ObiFunction(
         method,
         this.environment,
-        false, //method.name.lexeme === "init",
+        !!method.name && method.name.lexeme === "init",
       );
       if (!method.name) {
         console.error("fixme: why is method name not defined");
