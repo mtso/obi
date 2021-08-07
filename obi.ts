@@ -560,15 +560,48 @@ class Op {
   }
 }
 
+class Delayed extends Op {
+  at: number;
+  constructor(func: ObiFunction, args: any[], at: number) {
+    super(func, args);
+    this.at = at;
+  }
+  shouldRun(): boolean {
+    return Date.now() >= this.at;
+  }
+}
+
 class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   globals: Environment = new Environment();
-  private environment: Environment = this.globals;
+  environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
 
   queue: Op[] = [];
 
   constructor() {
     this.globals.define("print", new runtime.Print());
+
+    // delay(fun () { print("hi"); }, 5);
+    // print("bye");
+
+    class RtDelay extends Callable {
+      arity(): number {
+        return 2;
+      }
+
+      call(interpreter: Interpreter, args: any[]): any {
+        const func = args[0] as ObiFunction; // expr.Function;
+        // console.log(func);
+        const by = args[1] as number;
+        // const callee = new ObiFunction(func, interpreter.environment, false);
+
+        const op = new Delayed(func, [], Date.now() + by * 1000);
+        interpreter.queue.push(op);
+        return null;
+      }
+    }
+
+    this.globals.define("delay", new RtDelay());
   }
   // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
 

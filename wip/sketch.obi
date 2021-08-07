@@ -1,1 +1,4 @@
+delay(fun() {
+  print("bye");
+}, 2);
 print("hi");
