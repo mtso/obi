@@ -14,6 +14,7 @@ export module expr {
     visitGetExpr: (exp: Get) => T;
     visitSetExpr: (exp: Set) => T;
     visitSetDynExpr: (exp: SetDyn) => T;
+    visitSuperExpr: (exp: Super) => T;
     visitThisExpr: (exp: This) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
@@ -124,6 +125,19 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitSetDynExpr(this);
+    }
+  }
+  export class Super extends Expr {
+    keyword: Token;
+    method: Token;
+
+    constructor(keyword: Token, method: Token) {
+      super();
+      this.keyword = keyword;
+      this.method = method;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitSuperExpr(this);
     }
   }
   export class This extends Expr {

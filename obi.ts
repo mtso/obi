@@ -3,29 +3,6 @@ import { expr, stmt } from "./ast.ts";
 type Expr = expr.Expr;
 type Stmt = stmt.Stmt;
 
-// enum ValueType {
-//   STRING,
-//   NUMBER,
-//   CHARACTER,
-//   BOOLEAN,
-//   NIL,
-//   COMPOUND,
-// }
-
-// export class Value {
-//   type: ValueType;
-//   value: any;
-
-//   constructor(type: ValueType, value: any) {
-//     this.type = type;
-//     this.value = value;
-//   }
-
-//   public toString(): string {
-//     return `${ValueType[this.type]}{${this.value}}`;
-//   }
-// }
-
 enum TokenType {
   // Single-character tokens.
   LEFT_PAREN,
@@ -408,19 +385,19 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.declare(stm.name);
     this.define(stm.name);
 
-    // if (
-    //   null !== stm.superclass && stm.name.lexeme === stm.superclass.name.lexeme
-    // ) {
-    //   Lox.errorToken(stm.superclass.name, "A class can't inherit from itself.");
-    // }
-    // if (null !== stm.superclass) {
-    //   this.currentClass = ClassType.SUBCLASS;
-    //   this.resolveExpr(stm.superclass);
-    // }
-    // if (null !== stm.superclass) {
-    //   this.beginScope();
-    //   this.scopes[this.scopes.length - 1].set("super", true);
-    // }
+    if (
+      null !== stm.superclass && stm.name.lexeme === stm.superclass.name.lexeme
+    ) {
+      Obi.errorToken(stm.superclass.name, "A class can't inherit from itself.");
+    }
+    if (null !== stm.superclass) {
+      this.currentClass = ClassType.SUBCLASS;
+      this.resolveExpr(stm.superclass);
+    }
+    if (null !== stm.superclass) {
+      this.beginScope();
+      this.scopes[this.scopes.length - 1].set("super", true);
+    }
 
     this.beginScope();
     this.scopes[this.scopes.length - 1].set("this", true);
@@ -433,7 +410,7 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     }
     this.endScope();
 
-    // if (null !== stm.superclass) this.endScope();
+    if (null !== stm.superclass) this.endScope();
 
     this.currentClass = enclosingClass;
   }
@@ -501,6 +478,17 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.resolveExpr(exp.value);
     this.resolveExpr(exp.name);
     this.resolveExpr(exp.object);
+  }
+  visitSuperExpr(exp: expr.Super) {
+    if (this.currentClass === ClassType.NONE) {
+      Obi.errorToken(exp.keyword, "Can't use 'super' outside of a class.");
+    } else if (this.currentClass !== ClassType.SUBCLASS) {
+      Obi.errorToken(
+        exp.keyword,
+        "Can't use 'super' in a class with no superclass.",
+      );
+    }
+    this.resolveLocal(exp, exp.keyword);
   }
   visitLiteralExpr(exp: expr.Literal) {}
   visitLogicalExpr(exp: expr.Logical) {
@@ -609,15 +597,15 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   }
   visitClassStmt(stm: stmt.Class) {
     let superclass = null;
-    // if (null !== stm.superclass) {
-    //   superclass = this.evaluate(stm.superclass);
-    //   if (!(superclass instanceof ObiClass)) {
-    //     throw new RuntimeError(
-    //       stm.superclass.name,
-    //       "Superclass must be a class.",
-    //     );
-    //   }
-    // }
+    if (null !== stm.superclass) {
+      superclass = this.evaluate(stm.superclass);
+      if (!(superclass instanceof ObiClass)) {
+        throw new RuntimeError(
+          stm.superclass.name,
+          "Superclass must be a class.",
+        );
+      }
+    }
 
     this.environment.define(stm.name.lexeme, null);
 
@@ -641,13 +629,13 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     }
     const klass = new ObiClass(
       stm.name.lexeme,
-      superclass, // as ObiClass,
+      superclass,
       methods,
     );
 
-    // if (null !== superclass) {
-    //   this.environment = this.environment.enclosing as Environment;
-    // }
+    if (null !== superclass) {
+      this.environment = this.environment.enclosing as Environment;
+    }
 
     this.environment.assign(stm.name, klass);
   }
@@ -796,6 +784,19 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     const value = this.evaluate(exp.value);
     (object as ObiInstance).setDyn(name, value, exp.dot);
   }
+  visitSuperExpr(exp: expr.Super): any {
+    const distance = this.locals.get(exp) as number;
+    const superclass = this.environment.getAt(distance, "super") as ObiClass;
+    const object = this.environment.getAt(distance - 1, "this") as ObiInstance;
+    const method = superclass.findMethod(exp.method.lexeme);
+    if (null === method) {
+      throw new RuntimeError(
+        exp.method,
+        `Undefined property '${exp.method.lexeme}'.`,
+      );
+    }
+    return method.bind(object);
+  }
   visitMatchExpr(exp: expr.Match): any {
     const against = this.evaluate(exp.against);
 
@@ -810,15 +811,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         return this.execute(case_.branch);
       }
     }
-
-    // for (const case_ of exp.cases) {
-    //   const pattern = this.evaluate(case_.pattern);
-    //   console.log("matchvisit", against, pattern, case_.pattern);
-    //   if (this.isEqual(pattern, against)) {
-    //     console.log("branch", case_.branch);
-    //     return this.execute(case_.branch);
-    //   }
-    // }
 
     Obi.errorToken(exp.where, "Un-matched match block.");
     return null;
@@ -886,7 +878,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       return object;
     }
     if (object.toString) {
-      // console.log("tsStringify", object.toString());
       return object.toString();
     }
     return JSON.stringify(object);
@@ -1004,50 +995,6 @@ class Parser {
     return this.expressionStatement();
   }
 
-  // private forStatement(): Stmt {
-  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'for'.");
-  //   let initializer;
-  //   if (this.match(TT.SEMICOLON)) {
-  //     initializer = null;
-  //   } else if (this.match(TT.VAR)) {
-  //     initializer = this.varDeclaration();
-  //   } else {
-  //     initializer = this.expressionStatement();
-  //   }
-  //   let condition = null;
-  //   if (!this.check(TT.SEMICOLON)) {
-  //     condition = this.expression();
-  //   }
-  //   this.consume(TT.SEMICOLON, "Expect ';' after loop condition.");
-  //   let increment = null;
-  //   if (!this.check(TT.RIGHT_PAREN)) {
-  //     increment = this.expression();
-  //   }
-  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after for clauses.");
-  //   let body = this.statement();
-  //   if (increment !== null) {
-  //     body = new stmt.Block([body, new stmt.Expression(increment)]);
-  //   }
-  //   if (condition == null) condition = new expr.Literal(true);
-  //   body = new stmt.While(condition, body);
-  //   if (initializer !== null) {
-  //     body = new stmt.Block([initializer, body]);
-  //   }
-  //   return body;
-  // }
-
-  // private ifStatement(): Stmt {
-  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'if'.");
-  //   const condition = this.expression();
-  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after if condition.");
-  //   const thenBranch = this.statement();
-  //   let elseBranch = null;
-  //   if (this.match(TT.ELSE)) {
-  //     elseBranch = this.statement();
-  //   }
-  //   return new stmt.If(condition, thenBranch, elseBranch);
-  // }
-
   private returnStatement(): Stmt {
     const keyword = this.previous();
     let value = null;
@@ -1060,22 +1007,11 @@ class Parser {
 
   private varDeclaration() {
     const name = this.consume(TT.IDENTIFIER, "Expect variable name.");
-    // let initializer = null;
     this.consume(TT.COLON_EQUAL, "Expect ':=' after variable declaration.");
-    // if (this.match(TT.COLON_EQUAL)) {
     const initializer = this.expression();
-    // }
     this.consume(TT.SEMICOLON, "Expect ';' after variable declaration.");
     return new stmt.Var(name, initializer);
   }
-
-  // private whileStatement() {
-  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'while'.");
-  //   const condition = this.expression();
-  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after condition.");
-  //   const body = this.statement();
-  //   return new stmt.While(condition, body);
-  // }
 
   private expressionStatement(): Stmt {
     const expr = this.expression();
@@ -1122,36 +1058,6 @@ class Parser {
     return new expr.Function(null, [], body);
   }
 
-  // private function(kind: string): stmt.Function {
-  //   const name = this.consume(TT.IDENTIFIER, `Expect ${kind} name.`);
-  //   this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
-  //   const params: Token[] = [];
-  //   if (!this.check(TT.RIGHT_PAREN)) {
-  //     do {
-  //       if (params.length >= 255) {
-  //         this.error(this.peek(), "Can't have more than 255 parameters.");
-  //       }
-  //       params.push(this.consume(TT.IDENTIFIER, "Expect parameter name."));
-  //     } while (this.match(TT.COMMA));
-  //   }
-  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
-  //   this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
-  //   const body = this.block();
-  //   return new stmt.Function(name, params, body);
-  // }
-
-  // private block(): Stmt[] {
-  //   const statements = [];
-  //   while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
-  //     const decl = this.declaration();
-  //     if (decl) {
-  //       statements.push(decl);
-  //     }
-  //   }
-  //   this.consume(TT.RIGHT_BRACE, "Expect '}' after block.");
-  //   return statements;
-  // }
-
   private assignment(): Expr {
     const exp = this.or();
     if (this.match(TT.EQUAL)) {
@@ -1191,19 +1097,6 @@ class Parser {
     }
     return exp;
   }
-
-  // if match was an infix construct
-  // private match(): Expr {
-  //   let exp = this.equality();
-
-  //   while (this.match(TT.MATCH)) {
-  //     const operator = this.previous();
-  //     const right = this.equality();
-  //     exp = new expr.Binary(exp, operator, right);
-  //   }
-
-  //   return exp;
-  // }
 
   private equality(): Expr {
     let exp = this.comparison();
@@ -1253,7 +1146,6 @@ class Parser {
       const right = this.unary();
       return new expr.Unary(op, right);
     }
-    // return this.primary();
     return this.call();
   }
 
@@ -1351,18 +1243,15 @@ class Parser {
     if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
     if (this.match(TT.STRING)) return new expr.Literal(this.previous().literal);
 
-    // Turn off list literals for now.
-    // if (this.match(TT.LEFT_BRACKET)) return new expr.Literal(this.table());
-
-    // if (this.match(TT.SUPER)) {
-    //   const keyword = this.previous();
-    //   this.consume(TT.DOT, "Expect '.' after 'super'.");
-    //   const method = this.consume(
-    //     TT.IDENTIFIER,
-    //     "Expect superclass method name.",
-    //   );
-    //   return new expr.Super(keyword, method);
-    // }
+    if (this.match(TT.SUPER)) {
+      const keyword = this.previous();
+      this.consume(TT.DOT, "Expect '.' after 'super'.");
+      const method = this.consume(
+        TT.IDENTIFIER,
+        "Expect superclass method name.",
+      );
+      return new expr.Super(keyword, method);
+    }
 
     if (this.match(TT.THIS)) return new expr.This(this.previous());
 
@@ -1394,9 +1283,7 @@ class Parser {
       TT.LEFT_BRACE,
       "Expect '{' after discriminant in match statement.",
     );
-    // this.consume(TT.LEFT_PAREN, "Expect '(' after discriminant in match statement.");
     if (this.peek().type === TT.RIGHT_BRACE) {
-      // if (this.peek().type === TT.RIGHT_PAREN) {
       throw this.error(this.previous(), "Expect non-empty match expression.");
     }
     const cases = [];
@@ -1427,27 +1314,6 @@ class Parser {
 
     throw this.error(this.peek(), "Expect scalar in pattern.");
   }
-
-  // private lambda(kind: string): expr.Lambda {
-  //   let name = null;
-  //   if (this.match(TT.IDENTIFIER)) {
-  //     name = this.previous();
-  //   }
-  //   this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
-  //   const params: Token[] = [];
-  //   if (!this.check(TT.RIGHT_PAREN)) {
-  //     do {
-  //       if (params.length >= 255) {
-  //         this.error(this.peek(), "Can't have more than 255 parameters.");
-  //       }
-  //       params.push(this.consume(TT.IDENTIFIER, "Expect parameter name."));
-  //     } while (this.match(TT.COMMA));
-  //   }
-  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
-  //   this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
-  //   const body = this.block();
-  //   return new expr.Lambda(name, params, body);
-  // }
 
   private match(...types: TokenType[]): boolean {
     for (const typ of types) {
@@ -1893,14 +1759,8 @@ const ENC = new TextEncoder();
 function run(source: string) {
   const scanner = new Scanner(source);
   const tokens = scanner.scanTokens();
-
-  // for (const token of tokens) {
-  //   console.log(token.toString());
-  // }
-
   const parser = new Parser(tokens);
   const statements = parser.parse();
-  // console.log(statements);
 
   if (Obi.hadError) return;
 

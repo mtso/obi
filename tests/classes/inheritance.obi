@@ -1,0 +1,18 @@
+class Foo {
+    print() {
+        print(this.name);
+    }
+}
+
+class Bar < Foo {
+    init(name) {
+        this.name = name;
+    }
+
+    force() {
+        super.print();
+    }
+}
+
+Bar("world").print(); // expect: "world"
+Bar("world").force(); // expect: "world"
