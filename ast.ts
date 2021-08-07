@@ -7,12 +7,27 @@ export module expr {
     abstract accept<T>(visitor: Visitor<T>): T;
   }
   export type Visitor<T> = {
+    visitAssignExpr: (exp: Assign) => T;
     visitBinaryExpr: (exp: Binary) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
     visitUnaryExpr: (exp: Unary) => T;
+    visitVariableExpr: (exp: Variable) => T;
   };
+  export class Assign extends Expr {
+    name: Token;
+    value: Expr;
+
+    constructor(name: Token, value: Expr) {
+      super();
+      this.name = name;
+      this.value = value;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitAssignExpr(this);
+    }
+  }
   export class Binary extends Expr {
     left: Expr;
     operator: Token;
@@ -78,6 +93,17 @@ export module expr {
       return visitor.visitUnaryExpr(this);
     }
   }
+  export class Variable extends Expr {
+    name: Token;
+
+    constructor(name: Token) {
+      super();
+      this.name = name;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitVariableExpr(this);
+    }
+  }
 }
 
 export module stmt {
@@ -88,6 +114,7 @@ export module stmt {
   export type Visitor<T> = {
     visitBlockStmt: (exp: Block) => T;
     visitExpressionStmt: (exp: Expression) => T;
+    visitVarStmt: (exp: Var) => T;
   };
   export class Block extends Stmt {
     statements: Stmt[];
@@ -109,6 +136,19 @@ export module stmt {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitExpressionStmt(this);
+    }
+  }
+  export class Var extends Stmt {
+    name: Token;
+    initializer: Expr;
+
+    constructor(name: Token, initializer: Expr) {
+      super();
+      this.name = name;
+      this.initializer = initializer;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitVarStmt(this);
     }
   }
 }

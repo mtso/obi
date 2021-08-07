@@ -46,7 +46,7 @@ const defineAst = (baseName: string, types: string[]) => {
   console.log(`import { Token } from "./obi.ts";`);
   console.log(`\nexport module expr {`);
   defineAst("Expr", [
-    // "Assign   = name: Token, value: Expr",
+    "Assign   = name: Token, value: Expr",
     "Binary   = left: Expr, operator: Token, right: Expr",
     // "Call     = callee: Expr, paren: Token, args: Expr[]",
     // "GetDyn   = object: Expr, dot: Token, name: Expr",
@@ -61,7 +61,7 @@ const defineAst = (baseName: string, types: string[]) => {
     "Literal  = value: any",
     // "Logical  = left: Expr, operator: Token, right: Expr",
     "Unary    = operator: Token, right: Expr",
-    // "Variable = name: Token",
+    "Variable = name: Token",
   ]);
   console.log(`}`);
   console.log(`\nexport module stmt {
@@ -74,7 +74,7 @@ const defineAst = (baseName: string, types: string[]) => {
     // "If         = condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
     // "Print      = expression: Expr",
     // "Return     = keyword: Token, value: Expr | null",
-    // "Var        = name: Token, initializer: Expr | null",
+    "Var        = name: Token, initializer: Expr",
     // "While      = condition: Expr, body: Stmt",
   ]);
   console.log(`}`);

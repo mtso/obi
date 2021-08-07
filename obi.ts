@@ -54,6 +54,7 @@ enum TokenType {
 
   COLON,
   COLON_COLON,
+  COLON_EQUAL,
 
   // Literals.
   IDENTIFIER,
@@ -312,13 +313,21 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   visitExpressionStmt(stm: stmt.Expression) {
     this.resolveExpr(stm.expression);
   }
+  visitVarStmt(stm: stmt.Var) {
+    this.declare(stm.name);
+    if (stm.initializer !== null) {
+      this.resolveExpr(stm.initializer);
+    }
+    this.define(stm.name);
+  }
 
+  visitAssignExpr(exp: expr.Assign) {
+    this.resolveExpr(exp.value);
+    this.resolveLocal(exp, exp.name);
+  }
   visitBinaryExpr(exp: expr.Binary) {
     this.resolveExpr(exp.left);
     this.resolveExpr(exp.right);
-  }
-  visitGroupingExpr(exp: expr.Grouping) {
-    this.resolveExpr(exp.expression);
   }
   visitFunctionExpr(exp: expr.Function) {
     if (null !== exp.name) {
@@ -327,9 +336,31 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     }
     this.resolveFunction(exp, FunctionType.FUNCTION);
   }
+  // visitGetExpr(exp: expr.Get) {
+  //   this.resolveExpr(exp.object);
+  // }
+  visitGroupingExpr(exp: expr.Grouping) {
+    this.resolveExpr(exp.expression);
+  }
+  // visitSetExpr(exp: expr.Set) {
+  //   this.resolveExpr(exp.value);
+  //   this.resolveExpr(exp.object);
+  // }
   visitLiteralExpr(exp: expr.Literal) {}
   visitUnaryExpr(exp: expr.Unary) {
     this.resolveExpr(exp.right);
+  }
+  visitVariableExpr(exp: expr.Variable) {
+    if (
+      !(this.scopes.length < 1) &&
+      (this.scopes[this.scopes.length - 1]).get(exp.name.lexeme) === false
+    ) {
+      Obi.errorToken(
+        exp.name,
+        "Can't read local variable in its own initializer.",
+      );
+    }
+    this.resolveLocal(exp, exp.name);
   }
 }
 
@@ -390,7 +421,25 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   visitExpressionStmt(stm: stmt.Expression) {
     console.log("visitExprStmt", this.evaluate(stm.expression));
   }
+  visitVarStmt(stm: stmt.Var) {
+    let value = null;
+    if (stm.initializer != null) {
+      value = this.evaluate(stm.initializer);
+    }
+    this.environment.define(stm.name.lexeme, value);
+    return null;
+  }
 
+  visitAssignExpr(exp: expr.Assign): any {
+    const value = this.evaluate(exp.value);
+    const distance = this.locals.get(exp);
+    if (distance !== null && distance !== undefined) {
+      this.environment.assignAt(distance, exp.name, value);
+    } else {
+      this.globals.assign(exp.name, value);
+    }
+    return value;
+  }
   visitBinaryExpr(exp: expr.Binary): any {
     const left = this.evaluate(exp.left);
     const right = this.evaluate(exp.right);
@@ -443,6 +492,17 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     }
     return func;
   }
+  // visitGetExpr(exp: expr.Get): any {
+  //   const object = this.evaluate(exp.object);
+  //   // if (object instanceof LoxInstance) {
+  //   //   return (object as LoxInstance).get(exp.name);
+  //   // }
+  //   // console.log("visitGetExpr", object, "|", object.klass);
+  //   // console.log(JSON.stringify(object));
+  //   // console.log("visitGetExpr", exp);
+  //   // console.log(typeof object);
+  //   throw new RuntimeError(exp.name, "Only instances have properties.");
+  // }
   visitGroupingExpr(exp: expr.Grouping): any {
     const value = this.evaluate(exp.expression);
     return value;
@@ -450,6 +510,16 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   visitLiteralExpr(exp: expr.Literal): any {
     return exp.value;
   }
+  // visitSetExpr(exp: expr.Set): any {
+  //   const object = this.evaluate(exp.object);
+  //   if (!(object instanceof LoxInstance)) {
+  //     // console.log("visitSetExpr", object);
+  //     throw new RuntimeError(exp.name, "Only instances have fields.");
+  //   }
+  //   const value = this.evaluate(exp.value);
+  //   (object as LoxInstance).set(exp.name, value);
+  //   return value;
+  // }
   visitUnaryExpr(exp: expr.Unary): any {
     const right = this.evaluate(exp.right);
     switch (exp.operator.type) {
@@ -464,13 +534,25 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     // :notsureif:
     return null;
   }
+  visitVariableExpr(exp: expr.Variable): any {
+    return this.lookupVariable(exp.name, exp);
+  }
 
-  checkNumberOperands(op: Token, left: any, right: any) {
+  private lookupVariable(name: Token, exp: Expr): any {
+    const distance = this.locals.get(exp);
+    if (distance !== null && distance !== undefined) {
+      return this.environment.getAt(distance, name.lexeme);
+    } else {
+      return this.globals.get(name);
+    }
+  }
+
+  private checkNumberOperands(op: Token, left: any, right: any) {
     if (typeof left === "number" && typeof right === "number") return;
     throw new RuntimeError(op, "Operands must be numbers.");
   }
 
-  isTruthy(object: any): boolean {
+  private isTruthy(object: any): boolean {
     if (null === object || undefined === object || false === object) {
       return false;
     }
@@ -478,7 +560,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     return true;
   }
 
-  isEqual(a: any, b: any): boolean {
+  private isEqual(a: any, b: any): boolean {
     if (null == a && null == b) return true;
     else if (null == a) return false;
     return a === b;
@@ -535,7 +617,7 @@ class Parser {
   }
 
   private expression(): Expr {
-    return this.equality();
+    return this.assignment();
   }
 
   private declaration(): Stmt | null {
@@ -543,6 +625,11 @@ class Parser {
       // if (this.match(TT.CLASS)) return this.classDeclaration();
       // if (this.match(TT.FUN)) return this.function("function");
       // if (this.match(TT.VAR)) return this.varDeclaration();
+      if (
+        this.check(TT.IDENTIFIER) && this.peekNext().type === TT.COLON_EQUAL
+      ) {
+        return this.varDeclaration();
+      }
       return this.statement();
     } catch (err) {
       if (err instanceof ParseError) {
@@ -642,15 +729,16 @@ class Parser {
   //   return new stmt.Return(keyword, value);
   // }
 
-  // private varDeclaration() {
-  //   const name = this.consume(TT.IDENTIFIER, "Expect variable name.");
-  //   let initializer = null;
-  //   if (this.match(TT.EQUAL)) {
-  //     initializer = this.expression();
-  //   }
-  //   this.consume(TT.SEMICOLON, "Expect ';' after variable declaration.");
-  //   return new stmt.Var(name, initializer);
-  // }
+  private varDeclaration() {
+    const name = this.consume(TT.IDENTIFIER, "Expect variable name.");
+    // let initializer = null;
+    this.consume(TT.COLON_EQUAL, "Expect ':=' after variable declaration.");
+    // if (this.match(TT.COLON_EQUAL)) {
+    const initializer = this.expression();
+    // }
+    this.consume(TT.SEMICOLON, "Expect ';' after variable declaration.");
+    return new stmt.Var(name, initializer);
+  }
 
   // private whileStatement() {
   //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'while'.");
@@ -729,25 +817,26 @@ class Parser {
   //   return statements;
   // }
 
-  // private assignment(): Expr {
-  //   const exp = this.or();
-  //   if (this.match(TT.EQUAL)) {
-  //     const equals = this.previous();
-  //     const value = this.assignment();
-  //     if (exp instanceof expr.Variable) {
-  //       const name = (exp as expr.Variable).name;
-  //       return new expr.Assign(name, value);
-  //     } else if (exp instanceof expr.Get) {
-  //       const get = exp as expr.Get;
-  //       return new expr.Set(get.object, get.name, value);
-  //     } else if (exp instanceof expr.GetDyn) {
-  //       const get = exp as expr.GetDyn;
-  //       return new expr.SetDyn(get.object, get.dot, get.name, value);
-  //     }
-  //     this.error(equals, "Invalid assignment target.");
-  //   }
-  //   return exp;
-  // }
+  private assignment(): Expr {
+    const exp = this.equality();
+    // const exp = this.or();
+    if (this.match(TT.COLON_EQUAL)) {
+      const equals = this.previous();
+      const value = this.assignment();
+      if (exp instanceof expr.Variable) {
+        const name = (exp as expr.Variable).name;
+        return new expr.Assign(name, value);
+        // } else if (exp instanceof expr.Get) {
+        //   const get = exp as expr.Get;
+        //   return new expr.Set(get.object, get.name, value);
+        // } else if (exp instanceof expr.GetDyn) {
+        //   const get = exp as expr.GetDyn;
+        //   return new expr.SetDyn(get.object, get.dot, get.name, value);
+      }
+      this.error(equals, "Invalid assignment target.");
+    }
+    return exp;
+  }
 
   // private or(): Expr {
   //   let exp = this.and();
@@ -890,9 +979,9 @@ class Parser {
 
     // if (this.match(TT.THIS)) return new expr.This(this.previous());
 
-    // if (this.match(TT.IDENTIFIER)) {
-    //   return new expr.Variable(this.previous());
-    // }
+    if (this.match(TT.IDENTIFIER)) {
+      return new expr.Variable(this.previous());
+    }
 
     if (this.match(TT.LEFT_PAREN)) {
       const exp = this.expression();
@@ -959,6 +1048,11 @@ class Parser {
 
   private peek(): Token {
     return this.tokens[this.current];
+  }
+
+  private peekNext(): Token {
+    if (this.isAtEnd()) return this.tokens[this.tokens.length - 1];
+    return this.tokens[this.current + 1];
   }
 
   private previous(): Token {
@@ -1139,6 +1233,9 @@ class Scanner {
       case ":":
         if (this.match(":")) {
           this.addToken(TT.COLON_COLON);
+          this.column += 2;
+        } else if (this.match("=")) {
+          this.addToken(TT.COLON_EQUAL);
           this.column += 2;
         } else {
           this.addToken(TT.COLON);
