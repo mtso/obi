@@ -183,19 +183,23 @@ abstract class Callable {
 enum FunctionType {
   NONE,
   FUNCTION,
+  METHOD,
 }
 
 class ObiFunction extends Callable {
   private declaration: expr.Function;
   private closure: Environment;
+  isInitializer: boolean;
 
   constructor(
     declaration: expr.Function,
     closure: Environment,
+    isInitializer: boolean,
   ) {
     super();
     this.declaration = declaration;
     this.closure = closure;
+    this.isInitializer = isInitializer;
   }
   call(interpreter: Interpreter, args: any[]): any {
     const environment = new Environment(this.closure);
@@ -225,6 +229,91 @@ class ObiFunction extends Callable {
   }
 }
 
+enum ClassType {
+  NONE,
+  CLASS,
+  SUBCLASS,
+}
+
+class ObiClass extends Callable {
+  name: string;
+  private methods: Map<string, ObiFunction>;
+  private superclass: ObiClass | null;
+  constructor(
+    name: string,
+    superclass: ObiClass | null,
+    methods: Map<string, ObiFunction>,
+  ) {
+    super();
+    this.name = name;
+    this.superclass = superclass;
+    this.methods = methods;
+  }
+  findMethod(name: string): ObiFunction | null {
+    if (this.methods.has(name)) {
+      return this.methods.get(name) as ObiFunction;
+    }
+    if (null !== this.superclass) {
+      return this.superclass.findMethod(name) as ObiFunction;
+    }
+    return null;
+  }
+  toString() {
+    return this.name;
+  }
+  call(interpreter: Interpreter, args: any[]): any {
+    const instance = new ObiInstance(this);
+    // const initializer = this.findMethod("init");
+    // if (null !== initializer) {
+    //   initializer.bind(instance).call(interpreter, args);
+    // }
+    return instance;
+  }
+  arity(): number {
+    const initializer = this.findMethod("init");
+    if (null === initializer) {
+      return 0;
+    } else {
+      return initializer.arity();
+    }
+  }
+}
+
+class ObiInstance {
+  // private klass: LoxClass;
+  klass: ObiClass;
+  private fields: Map<string, any> = new Map<string, any>();
+  constructor(klass: ObiClass) {
+    this.klass = klass;
+  }
+  toString() {
+    return this.klass.name + " instance";
+  }
+  get(name: Token): any {
+    if (this.fields.has(name.lexeme)) {
+      return this.fields.get(name.lexeme);
+    }
+    const method = this.klass.findMethod(name.lexeme);
+    if (null !== method) return method; //.bind(this);
+    throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
+  }
+  // getDyn(name: any, where: Token): any {
+  //   if (this.fields.has(name)) {
+  //     return this.fields.get(name);
+  //   }
+  //   const method = this.klass.findMethod(name);
+  //   if (null !== method) return method.bind(this);
+  //   return null;
+  //   // throw new RuntimeError(where, `Undefined property '${name}'.`);
+  // }
+  set(name: Token, value: any) {
+    this.fields.set(name.lexeme, value);
+  }
+  // setDyn(name: any, value: any, where: Token): any {
+  //   this.fields.set(name, value);
+  // }
+}
+
 class RuntimeError extends Error {
   token: Token;
   constructor(token: Token, message: string) {
@@ -244,7 +333,7 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   private interpreter: Interpreter;
   private scopes: Map<string, boolean>[] = [];
   private currentFunction: FunctionType = FunctionType.NONE;
-  // private currentClass: ClassType = ClassType.NONE;
+  private currentClass: ClassType = ClassType.NONE;
 
   constructor(interpreter: Interpreter) {
     this.interpreter = interpreter;
@@ -261,18 +350,6 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   resolveExpr(exp: Expr) {
     exp.accept(this);
   }
-  // resolveFunction(func: stmt.Function, type: FunctionType) {
-  //   const enclosingFunction = this.currentFunction;
-  //   // this.currentFunction = typ;
-  //   this.beginScope();
-  //   for (const param of func.parameters) {
-  //     this.declare(param);
-  //     this.define(param);
-  //   }
-  //   this.resolveStmts(func.body);
-  //   this.endScope();
-  //   // this.currentFunction = enclosingFunction;
-  // }
   resolveFunction(func: expr.Function, type: FunctionType) {
     const enclosingFunction = this.currentFunction;
     this.currentFunction = type;
@@ -319,10 +396,42 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.resolveStmts(stm.statements);
     this.endScope();
   }
-  // visitCaseStmt(stm: stmt.Case) {
-  //   this.resolveExpr(stm.pattern);
-  //   this.resolveStmt(stm.branch);
-  // }
+  visitClassStmt(stm: stmt.Class) {
+    const enclosingClass = this.currentClass;
+    this.currentClass = ClassType.CLASS;
+
+    this.declare(stm.name);
+    this.define(stm.name);
+
+    // if (
+    //   null !== stm.superclass && stm.name.lexeme === stm.superclass.name.lexeme
+    // ) {
+    //   Lox.errorToken(stm.superclass.name, "A class can't inherit from itself.");
+    // }
+    // if (null !== stm.superclass) {
+    //   this.currentClass = ClassType.SUBCLASS;
+    //   this.resolveExpr(stm.superclass);
+    // }
+    // if (null !== stm.superclass) {
+    //   this.beginScope();
+    //   this.scopes[this.scopes.length - 1].set("super", true);
+    // }
+
+    this.beginScope();
+    // this.scopes[this.scopes.length - 1].set("this", true);
+    for (const method of stm.methods) {
+      let declaration = FunctionType.METHOD;
+      // if (method.name.lexeme === "init") {
+      //   declaration = FunctionType.INITIALIZER;
+      // }
+      this.resolveFunction(method, declaration);
+    }
+    this.endScope();
+
+    // if (null !== stm.superclass) this.endScope();
+
+    this.currentClass = enclosingClass;
+  }
   visitExpressionStmt(stm: stmt.Expression) {
     this.resolveExpr(stm.expression);
   }
@@ -369,16 +478,16 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     }
     this.resolveFunction(exp, FunctionType.FUNCTION);
   }
-  // visitGetExpr(exp: expr.Get) {
-  //   this.resolveExpr(exp.object);
-  // }
+  visitGetExpr(exp: expr.Get) {
+    this.resolveExpr(exp.object);
+  }
   visitGroupingExpr(exp: expr.Grouping) {
     this.resolveExpr(exp.expression);
   }
-  // visitSetExpr(exp: expr.Set) {
-  //   this.resolveExpr(exp.value);
-  //   this.resolveExpr(exp.object);
-  // }
+  visitSetExpr(exp: expr.Set) {
+    this.resolveExpr(exp.value);
+    this.resolveExpr(exp.object);
+  }
   visitLiteralExpr(exp: expr.Literal) {}
   visitLogicalExpr(exp: expr.Logical) {
     this.resolveExpr(exp.left);
@@ -477,10 +586,50 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   visitBlockStmt(stm: stmt.Block): any {
     return this.executeBlock(stm.statements, new Environment(this.environment));
   }
-  // visitCaseStmt(stm: stmt.Case) {
-  //   const pattern = this.evaluate(stm.pattern);
-  //   if (this.isEqual(pattern, ))
-  // }
+  visitClassStmt(stm: stmt.Class) {
+    let superclass = null;
+    // if (null !== stm.superclass) {
+    //   superclass = this.evaluate(stm.superclass);
+    //   if (!(superclass instanceof ObiClass)) {
+    //     throw new RuntimeError(
+    //       stm.superclass.name,
+    //       "Superclass must be a class.",
+    //     );
+    //   }
+    // }
+
+    this.environment.define(stm.name.lexeme, null);
+
+    if (null !== superclass) {
+      this.environment = new Environment(this.environment);
+      this.environment.define("super", superclass);
+    }
+
+    const methods = new Map<string, ObiFunction>();
+    for (const method of stm.methods) {
+      const func = new ObiFunction(
+        method,
+        this.environment,
+        false, //method.name.lexeme === "init",
+      );
+      if (!method.name) {
+        console.error("fixme: why is method name not defined");
+        continue;
+      }
+      methods.set(method.name.lexeme, func);
+    }
+    const klass = new ObiClass(
+      stm.name.lexeme,
+      superclass, // as ObiClass,
+      methods,
+    );
+
+    // if (null !== superclass) {
+    //   this.environment = this.environment.enclosing as Environment;
+    // }
+
+    this.environment.assign(stm.name, klass);
+  }
   visitExpressionStmt(stm: stmt.Expression): any {
     return this.evaluate(stm.expression);
   }
@@ -571,23 +720,23 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     return func.call(this, args);
   }
   visitFunctionExpr(exp: expr.Function): any {
-    const func = new ObiFunction(exp, this.environment);
+    const func = new ObiFunction(exp, this.environment, false);
     if (null !== exp.name) {
       this.environment.define(exp.name.lexeme, func);
     }
     return func;
   }
-  // visitGetExpr(exp: expr.Get): any {
-  //   const object = this.evaluate(exp.object);
-  //   // if (object instanceof LoxInstance) {
-  //   //   return (object as LoxInstance).get(exp.name);
-  //   // }
-  //   // console.log("visitGetExpr", object, "|", object.klass);
-  //   // console.log(JSON.stringify(object));
-  //   // console.log("visitGetExpr", exp);
-  //   // console.log(typeof object);
-  //   throw new RuntimeError(exp.name, "Only instances have properties.");
-  // }
+  visitGetExpr(exp: expr.Get): any {
+    const object = this.evaluate(exp.object);
+    if (object instanceof ObiInstance) {
+      return (object as ObiInstance).get(exp.name);
+    }
+    // console.log("visitGetExpr", object, "|", object.klass);
+    // console.log(JSON.stringify(object));
+    // console.log("visitGetExpr", exp);
+    // console.log(typeof object);
+    throw new RuntimeError(exp.name, "Only instances have properties.");
+  }
   visitGroupingExpr(exp: expr.Grouping): any {
     const value = this.evaluate(exp.expression);
     return value;
@@ -604,16 +753,16 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     }
     return this.evaluate(exp.right);
   }
-  // visitSetExpr(exp: expr.Set): any {
-  //   const object = this.evaluate(exp.object);
-  //   if (!(object instanceof LoxInstance)) {
-  //     // console.log("visitSetExpr", object);
-  //     throw new RuntimeError(exp.name, "Only instances have fields.");
-  //   }
-  //   const value = this.evaluate(exp.value);
-  //   (object as LoxInstance).set(exp.name, value);
-  //   return value;
-  // }
+  visitSetExpr(exp: expr.Set): any {
+    const object = this.evaluate(exp.object);
+    if (!(object instanceof ObiInstance)) {
+      // console.log("visitSetExpr", object);
+      throw new RuntimeError(exp.name, "Only instances have fields.");
+    }
+    const value = this.evaluate(exp.value);
+    (object as ObiInstance).set(exp.name, value);
+    return value;
+  }
   visitMatchExpr(exp: expr.Match): any {
     const against = this.evaluate(exp.against);
 
@@ -734,7 +883,6 @@ export class Pattern extends Callable {
     }
   }
 }
-// "Case       = pattern: Expr, branch: Stmt",
 
 export class Case {
   pattern: Expr | null;
@@ -776,7 +924,7 @@ class Parser {
 
   private declaration(): Stmt | null {
     try {
-      // if (this.match(TT.CLASS)) return this.classDeclaration();
+      if (this.match(TT.CLASS)) return this.classDeclaration();
       if (this.match(TT.FUN)) {
         return new stmt.Expression(this.function("function"));
       }
@@ -796,23 +944,23 @@ class Parser {
     }
   }
 
-  // private classDeclaration(): Stmt {
-  //   const name = this.consume(TT.IDENTIFIER, "Expect class name.");
-  //   let superclass = null;
-  //   if (this.match(TT.LESS)) {
-  //     this.consume(TT.IDENTIFIER, "Expect superclass name.");
-  //     superclass = new expr.Variable(this.previous());
-  //   }
+  private classDeclaration(): Stmt {
+    const name = this.consume(TT.IDENTIFIER, "Expect class name.");
+    let superclass = null;
+    if (this.match(TT.LESS)) {
+      this.consume(TT.IDENTIFIER, "Expect superclass name.");
+      superclass = new expr.Variable(this.previous());
+    }
 
-  //   this.consume(TT.LEFT_BRACE, "Expect '{' before class body.");
+    this.consume(TT.LEFT_BRACE, "Expect '{' before class body.");
 
-  //   const methods: stmt.Function[] = [];
-  //   while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
-  //     methods.push(this.function("method"));
-  //   }
-  //   this.consume(TT.RIGHT_BRACE, "Expect '}' after class body.");
-  //   return new stmt.Class(name, superclass, methods);
-  // }
+    const methods: expr.Function[] = [];
+    while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
+      methods.push(this.function("method"));
+    }
+    this.consume(TT.RIGHT_BRACE, "Expect '}' after class body.");
+    return new stmt.Class(name, superclass, methods);
+  }
 
   private statement(): Stmt {
     if (this.match(TT.RETURN)) return this.returnStatement();
@@ -977,9 +1125,9 @@ class Parser {
       if (exp instanceof expr.Variable) {
         const name = (exp as expr.Variable).name;
         return new expr.Assign(name, value);
-        // } else if (exp instanceof expr.Get) {
-        //   const get = exp as expr.Get;
-        //   return new expr.Set(get.object, get.name, value);
+      } else if (exp instanceof expr.Get) {
+        const get = exp as expr.Get;
+        return new expr.Set(get.object, get.name, value);
         // } else if (exp instanceof expr.GetDyn) {
         //   const get = exp as expr.GetDyn;
         //   return new expr.SetDyn(get.object, get.dot, get.name, value);
@@ -1086,13 +1234,18 @@ class Parser {
     }
     const paren = this.consume(TT.RIGHT_PAREN, "Expect ')' after arguments.");
 
-    while (this.check(TT.LEFT_BRACE)) {
-      // console.log("trailer", this.peek());
+    while (this.check(TT.LEFT_BRACE, TT.FUN)) {
       if (args.length >= 255) {
         this.error(this.peek(), "Can't have more than 255 arguments.");
       }
-      const trailing = this.anonymousFunction();
-      args.push(trailing);
+
+      if (this.match(TT.FUN)) {
+        const trailing = this.function("function");
+        args.push(trailing);
+      } else if (this.check(TT.LEFT_BRACE)) {
+        const trailing = this.anonymousFunction();
+        args.push(trailing);
+      }
     }
 
     return new expr.Call(callee, paren, args);
@@ -1103,7 +1256,7 @@ class Parser {
     while (true) {
       if (this.match(TT.LEFT_PAREN)) {
         exp = this.finishCall(exp);
-        // } else if (this.match(TT.DOT)) {
+      } else if (this.match(TT.DOT)) {
         //   if (this.match(TT.LEFT_PAREN)) {
         //     const dot = this.previous();
         //     const name = this.expression();
@@ -1120,11 +1273,11 @@ class Parser {
         //     // const propName = new expr.Literal(name.lexeme);
         //     // exp = new expr.GetDyn(exp, name, propName);
 
-        //     const name = this.consume(
-        //       TT.IDENTIFIER,
-        //       "Expect property name after '.'.",
-        //     );
-        //     exp = new expr.Get(exp, name);
+        const name = this.consume(
+          TT.IDENTIFIER,
+          "Expect property name after '.'.",
+        );
+        exp = new expr.Get(exp, name);
         //   }
       } else {
         break;
@@ -1271,14 +1424,15 @@ class Parser {
     return false;
   }
 
-  private consume(typ: TokenType, message: string): Token {
-    if (this.check(typ)) return this.advance();
+  private consume(type: TokenType, message: string): Token {
+    if (this.check(type)) return this.advance();
     throw this.error(this.peek(), message);
   }
 
-  private check(type: TokenType): boolean {
+  private check(...types: TokenType[]): boolean {
     if (this.isAtEnd()) return false;
-    return this.peek().type === type;
+    const next = this.peek().type;
+    return types.some((t) => t === next);
   }
 
   private advance(): Token {
@@ -1531,9 +1685,10 @@ class Scanner {
   private identifier() {
     while (this.isAlphaNumeric(this.peek())) this.advance();
     const text = this.source.substring(this.start, this.current);
-    let typ: TokenType | null = Scanner.keywords.get(text) || null;
-    if (typ === null) typ = TT.IDENTIFIER;
-    this.addToken(typ);
+    let type: TokenType | null = Scanner.keywords.get(text) || null;
+    if (type === null) type = TT.IDENTIFIER;
+    this.addToken(type);
+    this.column += (this.current - this.start);
   }
 
   private number() {
@@ -1554,6 +1709,7 @@ class Scanner {
       TT.NUMBER,
       number,
     );
+    this.column += (this.current - this.start);
   }
 
   private unescape(source: string, transforms: string[][]) {

@@ -1,0 +1,15 @@
+class Foo {
+  print() {
+    print("a");
+  }
+
+  doF(f) {
+    f();
+  }
+}
+
+foo := Foo();
+foo.print();
+foo.doF() {
+  print("f");
+};

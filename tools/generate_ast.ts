@@ -50,14 +50,13 @@ const defineAst = (baseName: string, types: string[]) => {
     "Binary   = left: Expr, operator: Token, right: Expr",
     "Call     = callee: Expr, paren: Token, args: Expr[]",
     // "GetDyn   = object: Expr, dot: Token, name: Expr",
-    // "Get      = object: Expr, name: Token",
-    // "Set      = object: Expr, name: Token, value: Expr",
+    "Get      = object: Expr, name: Token",
+    "Set      = object: Expr, name: Token, value: Expr",
     // "SetDyn   = object: Expr, dot: Token, name: Expr, value: Expr",
     // "Super    = keyword: Token, method: Token",
     // "This     = keyword: Token",
     "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
     "Grouping = expression: Expr",
-    // "Lambda   = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
     "Literal  = value: any",
     "Match    = where: Token, against: Expr, cases: Case[]",
     "Logical  = left: Expr, operator: Token, right: Expr",
@@ -69,15 +68,10 @@ const defineAst = (baseName: string, types: string[]) => {
   type Expr = expr.Expr;`);
   defineAst("Stmt", [
     "Block      = statements: Stmt[]",
-    // "Case       = pattern: Expr, branch: Stmt",
-    // "Class      = name: Token, superclass: expr.Variable | null, methods: Function[]",
+    "Class      = name: Token, superclass: expr.Variable | null, methods: expr.Function[]",
     "Expression = expression: Expr",
-    // "Function   = name: Token, parameters: Token[], body: Stmt[]",
-    // "If         = condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
-    // "Print      = expression: Expr",
     "Return     = keyword: Token, value: Expr | null",
     "Var        = name: Token, initializer: Expr",
-    // "While      = condition: Expr, body: Stmt",
   ]);
   console.log(`}`);
 }

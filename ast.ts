@@ -10,6 +10,8 @@ export module expr {
     visitAssignExpr: (exp: Assign) => T;
     visitBinaryExpr: (exp: Binary) => T;
     visitCallExpr: (exp: Call) => T;
+    visitGetExpr: (exp: Get) => T;
+    visitSetExpr: (exp: Set) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
@@ -59,6 +61,34 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitCallExpr(this);
+    }
+  }
+  export class Get extends Expr {
+    object: Expr;
+    name: Token;
+
+    constructor(object: Expr, name: Token) {
+      super();
+      this.object = object;
+      this.name = name;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitGetExpr(this);
+    }
+  }
+  export class Set extends Expr {
+    object: Expr;
+    name: Token;
+    value: Expr;
+
+    constructor(object: Expr, name: Token, value: Expr) {
+      super();
+      this.object = object;
+      this.name = name;
+      this.value = value;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitSetExpr(this);
     }
   }
   export class Function extends Expr {
@@ -161,6 +191,7 @@ export module stmt {
   }
   export type Visitor<T> = {
     visitBlockStmt: (exp: Block) => T;
+    visitClassStmt: (exp: Class) => T;
     visitExpressionStmt: (exp: Expression) => T;
     visitReturnStmt: (exp: Return) => T;
     visitVarStmt: (exp: Var) => T;
@@ -174,6 +205,25 @@ export module stmt {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitBlockStmt(this);
+    }
+  }
+  export class Class extends Stmt {
+    name: Token;
+    superclass: expr.Variable | null;
+    methods: expr.Function[];
+
+    constructor(
+      name: Token,
+      superclass: expr.Variable | null,
+      methods: expr.Function[],
+    ) {
+      super();
+      this.name = name;
+      this.superclass = superclass;
+      this.methods = methods;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitClassStmt(this);
     }
   }
   export class Expression extends Stmt {
