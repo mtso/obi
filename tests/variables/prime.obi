@@ -1,0 +1,17 @@
+a := 5
+a' := a + 2
+print(a')
+// expect 7
+a'' := a' + 4
+print(a'')
+// expect 11
+
+b := 7
+b' := 7 < 9 :: (
+  true -> {
+    b + 1
+  }
+  false -> b - 1
+)
+print(b')
+// expect 8

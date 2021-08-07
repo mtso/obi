@@ -8,6 +8,7 @@ export module expr {
   }
   export type Visitor<T> = {
     visitBinaryExpr: (exp: Binary) => T;
+    visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
     visitUnaryExpr: (exp: Unary) => T;
@@ -25,6 +26,21 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitBinaryExpr(this);
+    }
+  }
+  export class Function extends Expr {
+    name: Token | null;
+    parameters: Token[];
+    body: stmt.Stmt[];
+
+    constructor(name: Token | null, parameters: Token[], body: stmt.Stmt[]) {
+      super();
+      this.name = name;
+      this.parameters = parameters;
+      this.body = body;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitFunctionExpr(this);
     }
   }
   export class Grouping extends Expr {
@@ -69,5 +85,30 @@ export module stmt {
   export abstract class Stmt {
     abstract accept<T>(visitor: Visitor<T>): T;
   }
-  export type Visitor<T> = {};
+  export type Visitor<T> = {
+    visitBlockStmt: (exp: Block) => T;
+    visitExpressionStmt: (exp: Expression) => T;
+  };
+  export class Block extends Stmt {
+    statements: Stmt[];
+
+    constructor(statements: Stmt[]) {
+      super();
+      this.statements = statements;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitBlockStmt(this);
+    }
+  }
+  export class Expression extends Stmt {
+    expression: Expr;
+
+    constructor(expression: Expr) {
+      super();
+      this.expression = expression;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitExpressionStmt(this);
+    }
+  }
 }

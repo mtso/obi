@@ -1,26 +1,30 @@
 import { expr, stmt } from "./ast.ts";
 
-enum ValueType {
-  STRING,
-  NUMBER,
-  CHARACTER,
-  NIL,
-  COMPOUND,
-}
+type Expr = expr.Expr;
+type Stmt = stmt.Stmt;
 
-class Value {
-  type: ValueType;
-  value: any;
+// enum ValueType {
+//   STRING,
+//   NUMBER,
+//   CHARACTER,
+//   BOOLEAN,
+//   NIL,
+//   COMPOUND,
+// }
 
-  constructor(type: ValueType, value: any) {
-    this.type = type;
-    this.value = value;
-  }
+// export class Value {
+//   type: ValueType;
+//   value: any;
 
-  public toString(): String {
-    return `${ValueType[this.type]}{${this.value}}`;
-  }
-}
+//   constructor(type: ValueType, value: any) {
+//     this.type = type;
+//     this.value = value;
+//   }
+
+//   public toString(): string {
+//     return `${ValueType[this.type]}{${this.value}}`;
+//   }
+// }
 
 enum TokenType {
   // Single-character tokens.
@@ -36,6 +40,7 @@ enum TokenType {
   SLASH,
   STAR,
   TILDE,
+  UNDERSCORE,
 
   // One or two character tokens.
   BANG,
@@ -77,6 +82,7 @@ enum TokenType {
   TAP,
   TYPE,
 
+  NEWLINE,
   EOF,
 }
 
@@ -85,14 +91,14 @@ const TT = TokenType;
 export class Token {
   type: TokenType;
   lexeme: string;
-  literal: Value | null;
+  literal: any; // Value | null;
   line: number;
   column: number;
 
   constructor(
     type: TokenType,
     lexeme: string,
-    literal: Value | null,
+    literal: any,
     line: number,
     column: number,
   ) {
@@ -104,9 +110,883 @@ export class Token {
   }
 
   public toString(): string {
+    const lexeme: string = this.lexeme === "\n" ? "<newline>" : this.lexeme;
     return `[${this.line}:${this.column}] ${
       TokenType[this.type]
-    } '${this.lexeme}' ${this.literal && this.literal.toString()}`;
+    } '${lexeme}' ${this.literal && this.literal.toString()}`;
+  }
+}
+
+class Environment {
+  enclosing: Environment | null;
+  values: Map<string, any> = new Map<string, any>();
+
+  constructor(enclosing?: Environment) {
+    if (enclosing) {
+      this.enclosing = enclosing;
+    } else {
+      this.enclosing = null;
+    }
+  }
+
+  define(name: string, value: any) {
+    this.values.set(name, value);
+  }
+
+  ancestor(distance: number): Environment {
+    let environment: Environment = this;
+    for (let i = 0; i < distance; i++) {
+      environment = environment.enclosing as Environment;
+    }
+    return environment;
+  }
+
+  getAt(distance: number, name: string) {
+    return this.ancestor(distance).values.get(name);
+  }
+
+  assignAt(distance: number, name: Token, value: any) {
+    this.ancestor(distance).values.set(name.lexeme, value);
+  }
+
+  get(name: Token): any {
+    if (this.values.has(name.lexeme)) {
+      return this.values.get(name.lexeme);
+    }
+    if (this.enclosing !== null) {
+      return this.enclosing.get(name);
+    }
+    throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
+  }
+
+  assign(name: Token, value: any): any {
+    if (this.values.has(name.lexeme)) {
+      this.values.set(name.lexeme, value);
+      return;
+    }
+    if (this.enclosing !== null) {
+      return this.enclosing.assign(name, value);
+    }
+    throw new RuntimeError(name, `Undefined variable '${name.lexeme}'.`);
+  }
+}
+
+abstract class Callable {
+  abstract arity(): number;
+  abstract call(interpreter: Interpreter, args: any[]): any;
+}
+
+enum FunctionType {
+  NONE,
+  FUNCTION,
+}
+
+class ObiFunction extends Callable {
+  private declaration: expr.Function;
+  private closure: Environment;
+
+  constructor(
+    declaration: expr.Function,
+    closure: Environment,
+  ) {
+    super();
+    this.declaration = declaration;
+    this.closure = closure;
+  }
+  call(interpreter: Interpreter, args: any[]): any {
+    console.log("called ObiFunction");
+    // const environment = new Environment(this.closure);
+    // for (let i = 0; i < this.declaration.parameters.length; i++) {
+    //   environment.define(this.declaration.parameters[i].lexeme, args[i]);
+    // }
+    // try {
+    //   interpreter.executeBlock(this.declaration.body, environment);
+    // } catch (err) {
+    //   if (err instanceof Return) {
+    //     return (err as Return).value;
+    //   } else {
+    //     throw err;
+    //   }
+    // }
+    // return null;
+  }
+  arity(): number {
+    return this.declaration.parameters.length;
+  }
+  toString(): string {
+    if (null !== this.declaration.name) {
+      return `<lambda ${this.declaration.name.lexeme}>`;
+    } else {
+      return `<lambda>`;
+    }
+  }
+}
+
+class RuntimeError extends Error {
+  token: Token;
+  constructor(token: Token, message: string) {
+    super(message);
+    this.token = token;
+  }
+}
+
+class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
+  private interpreter: Interpreter;
+  private scopes: Map<string, boolean>[] = [];
+  private currentFunction: FunctionType = FunctionType.NONE;
+  // private currentClass: ClassType = ClassType.NONE;
+
+  constructor(interpreter: Interpreter) {
+    this.interpreter = interpreter;
+  }
+
+  resolveStmts(statements: Stmt[]) {
+    for (const statement of statements) {
+      this.resolveStmt(statement);
+    }
+  }
+  resolveStmt(stm: Stmt) {
+    stm.accept(this);
+  }
+  resolveExpr(exp: Expr) {
+    exp.accept(this);
+  }
+  // resolveFunction(func: stmt.Function, type: FunctionType) {
+  //   const enclosingFunction = this.currentFunction;
+  //   // this.currentFunction = typ;
+  //   this.beginScope();
+  //   for (const param of func.parameters) {
+  //     this.declare(param);
+  //     this.define(param);
+  //   }
+  //   this.resolveStmts(func.body);
+  //   this.endScope();
+  //   // this.currentFunction = enclosingFunction;
+  // }
+  resolveFunction(func: expr.Function, type: FunctionType) {
+    // const enclosingFunction = this.currentFunction;
+    // this.currentFunction = type;
+    this.beginScope();
+    for (const param of func.parameters) {
+      this.declare(param);
+      this.define(param);
+    }
+    this.resolveStmts(func.body);
+    this.endScope();
+    // this.currentFunction = enclosingFunction;
+  }
+
+  beginScope() {
+    this.scopes.push(new Map<string, boolean>());
+  }
+  endScope() {
+    this.scopes.pop();
+  }
+  declare(name: Token) {
+    if (this.scopes.length < 1) return;
+    const scope = this.scopes[this.scopes.length - 1];
+    if (scope.has(name.lexeme)) {
+      Obi.errorToken(name, "Already a variable with this name in this scope.");
+    }
+    scope.set(name.lexeme, false);
+  }
+  define(name: Token) {
+    if (this.scopes.length < 1) return;
+    const scope = this.scopes[this.scopes.length - 1];
+    scope.set(name.lexeme, true);
+  }
+  resolveLocal(exp: Expr, name: Token) {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      if (this.scopes[i].has(name.lexeme)) {
+        this.interpreter.resolve(exp, this.scopes.length - 1 - i);
+        return;
+      }
+    }
+  }
+
+  visitBlockStmt(stm: stmt.Block) {
+    this.beginScope();
+    this.resolveStmts(stm.statements);
+    this.endScope();
+  }
+  visitExpressionStmt(stm: stmt.Expression) {
+    this.resolveExpr(stm.expression);
+  }
+
+  visitBinaryExpr(exp: expr.Binary) {
+    this.resolveExpr(exp.left);
+    this.resolveExpr(exp.right);
+  }
+  visitGroupingExpr(exp: expr.Grouping) {
+    this.resolveExpr(exp.expression);
+  }
+  visitFunctionExpr(exp: expr.Function) {
+    if (null !== exp.name) {
+      this.declare(exp.name);
+      this.define(exp.name);
+    }
+    this.resolveFunction(exp, FunctionType.FUNCTION);
+  }
+  visitLiteralExpr(exp: expr.Literal) {}
+  visitUnaryExpr(exp: expr.Unary) {
+    this.resolveExpr(exp.right);
+  }
+}
+
+class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
+  globals: Environment = new Environment();
+  private environment: Environment = this.globals;
+  private locals: Map<Expr, number> = new Map<Expr, number>();
+
+  interpret(statements: Stmt[]) {
+    try {
+      for (const statement of statements) {
+        this.execute(statement);
+      }
+    } catch (err) {
+      if (err instanceof RuntimeError) {
+        Obi.runtimeError(err);
+      } else {
+        throw err;
+      }
+    }
+  }
+  // interpret(expr: Expr): any {
+  //   try {
+  //     return this.evaluate(expr);
+  //   } catch (err) {
+  //     if (err instanceof RuntimeError) {
+  //       Obi.hadRuntimeError = true;
+  //       return null;
+  //     } else {
+  //       throw err;
+  //     }
+  //   }
+  // }
+  private evaluate(expr: Expr): any {
+    return expr.accept(this);
+  }
+  private execute(stmt: Stmt) {
+    stmt.accept(this);
+  }
+  resolve(exp: Expr, depth: number) {
+    this.locals.set(exp, depth);
+  }
+  executeBlock(statements: Stmt[], environment: Environment) {
+    const previous = this.environment;
+    try {
+      this.environment = environment;
+      for (const statement of statements) {
+        this.execute(statement);
+      }
+    } finally {
+      this.environment = previous;
+    }
+  }
+
+  visitBlockStmt(stm: stmt.Block) {
+    this.executeBlock(stm.statements, new Environment(this.environment));
+  }
+  visitExpressionStmt(stm: stmt.Expression) {
+    console.log("visitExprStmt", this.evaluate(stm.expression));
+  }
+
+  visitBinaryExpr(exp: expr.Binary): any {
+    const left = this.evaluate(exp.left);
+    const right = this.evaluate(exp.right);
+    switch (exp.operator.type) {
+      case TT.BANG_EQUAL:
+        return !this.isEqual(left, right);
+      case TT.EQUAL_EQUAL:
+        return this.isEqual(left, right);
+      case TT.GREATER:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) > (right as number);
+      case TT.GREATER_EQUAL:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) >= (right as number);
+      case TT.LESS:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) < (right as number);
+      case TT.LESS_EQUAL:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) <= (right as number);
+      case TT.MINUS:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) - (right as number);
+      case TT.PLUS:
+        if (typeof left === "number" && typeof right === "number") {
+          return (left as number) + (right as number);
+        }
+        if (typeof left === "string" && typeof right === "string") {
+          return (left as string) + (right as string);
+        }
+        throw new RuntimeError(
+          exp.operator,
+          "Operands must be two numbers or two strings.",
+        );
+      case TT.SLASH:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) / (right as number);
+      case TT.STAR:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) * (right as number);
+    }
+    // Unreachable.
+    return null;
+  }
+  visitFunctionExpr(exp: expr.Function): any {
+    console.log("visitFunctionExpr");
+    const func = new ObiFunction(exp, this.environment);
+    if (null !== exp.name) {
+      this.environment.define(exp.name.lexeme, func);
+    }
+    return func;
+  }
+  visitGroupingExpr(exp: expr.Grouping): any {
+    const value = this.evaluate(exp.expression);
+    return value;
+  }
+  visitLiteralExpr(exp: expr.Literal): any {
+    return exp.value;
+  }
+  visitUnaryExpr(exp: expr.Unary): any {
+    const right = this.evaluate(exp.right);
+    switch (exp.operator.type) {
+      case TT.BANG:
+        return !this.isTruthy(right);
+      case TT.MINUS:
+        if (typeof right !== "number") {
+          throw new RuntimeError(exp.operator, "Operand must be a number.");
+        }
+        return -(right as number);
+    }
+    // :notsureif:
+    return null;
+  }
+
+  checkNumberOperands(op: Token, left: any, right: any) {
+    if (typeof left === "number" && typeof right === "number") return;
+    throw new RuntimeError(op, "Operands must be numbers.");
+  }
+
+  isTruthy(object: any): boolean {
+    if (null === object || undefined === object || false === object) {
+      return false;
+    }
+    if (object instanceof Boolean) return object as boolean;
+    return true;
+  }
+
+  isEqual(a: any, b: any): boolean {
+    if (null == a && null == b) return true;
+    else if (null == a) return false;
+    return a === b;
+  }
+
+  static stringify(object: any) {
+    if (null === object) return "nil";
+    if (typeof object === "number") {
+      if (object === 0) {
+        const bytes = Interpreter.doubleToByteArray(object);
+        // Not really sure why this is expected...
+        if (bytes[0] === -128) return "-0";
+      }
+      return JSON.stringify(object);
+    }
+    if (typeof object === "string") {
+      return object;
+    }
+    if (object.toString) {
+      // console.log("tsStringify", object.toString());
+      return object.toString();
+    }
+    return JSON.stringify(object);
+  }
+
+  private static doubleToByteArray(num: number) {
+    const buffer = new ArrayBuffer(8); // JS numbers are 8 bytes long, or 64 bits
+    const longNum = new Float64Array(buffer); // so equivalent to Float64
+    longNum[0] = num;
+    return Array.from(new Int8Array(buffer)).reverse(); // reverse to get little endian
+  }
+}
+
+class ParseError extends Error {
+}
+
+class Parser {
+  tokens: Token[];
+  private current: number = 0;
+
+  constructor(tokens: Token[]) {
+    this.tokens = tokens;
+  }
+
+  parse(): Stmt[] {
+    const statements: Stmt[] = [];
+    while (!this.isAtEnd()) {
+      const decl = this.declaration();
+      if (decl) {
+        statements.push(decl);
+      }
+    }
+    return statements;
+  }
+
+  private expression(): Expr {
+    return this.equality();
+  }
+
+  private declaration(): Stmt | null {
+    try {
+      // if (this.match(TT.CLASS)) return this.classDeclaration();
+      // if (this.match(TT.FUN)) return this.function("function");
+      // if (this.match(TT.VAR)) return this.varDeclaration();
+      return this.statement();
+    } catch (err) {
+      if (err instanceof ParseError) {
+        this.synchronize();
+        return null;
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  // private classDeclaration(): Stmt {
+  //   const name = this.consume(TT.IDENTIFIER, "Expect class name.");
+  //   let superclass = null;
+  //   if (this.match(TT.LESS)) {
+  //     this.consume(TT.IDENTIFIER, "Expect superclass name.");
+  //     superclass = new expr.Variable(this.previous());
+  //   }
+
+  //   this.consume(TT.LEFT_BRACE, "Expect '{' before class body.");
+
+  //   const methods: stmt.Function[] = [];
+  //   while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
+  //     methods.push(this.function("method"));
+  //   }
+  //   this.consume(TT.RIGHT_BRACE, "Expect '}' after class body.");
+  //   return new stmt.Class(name, superclass, methods);
+  // }
+
+  private statement(): Stmt {
+    // if (this.match(TT.FOR)) return this.forStatement();
+    // if (this.match(TT.IF)) return this.ifStatement();
+    // if (this.match(TT.PRINT)) return this.printStatement();
+    // if (this.match(TT.RETURN)) return this.returnStatement();
+    // if (this.match(TT.WHILE)) return this.whileStatement();
+    if (this.match(TT.LEFT_BRACE)) return new stmt.Block(this.block());
+    return this.expressionStatement();
+  }
+
+  // private forStatement(): Stmt {
+  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'for'.");
+  //   let initializer;
+  //   if (this.match(TT.SEMICOLON)) {
+  //     initializer = null;
+  //   } else if (this.match(TT.VAR)) {
+  //     initializer = this.varDeclaration();
+  //   } else {
+  //     initializer = this.expressionStatement();
+  //   }
+  //   let condition = null;
+  //   if (!this.check(TT.SEMICOLON)) {
+  //     condition = this.expression();
+  //   }
+  //   this.consume(TT.SEMICOLON, "Expect ';' after loop condition.");
+  //   let increment = null;
+  //   if (!this.check(TT.RIGHT_PAREN)) {
+  //     increment = this.expression();
+  //   }
+  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after for clauses.");
+  //   let body = this.statement();
+  //   if (increment !== null) {
+  //     body = new stmt.Block([body, new stmt.Expression(increment)]);
+  //   }
+  //   if (condition == null) condition = new expr.Literal(true);
+  //   body = new stmt.While(condition, body);
+  //   if (initializer !== null) {
+  //     body = new stmt.Block([initializer, body]);
+  //   }
+  //   return body;
+  // }
+
+  // private ifStatement(): Stmt {
+  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'if'.");
+  //   const condition = this.expression();
+  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after if condition.");
+  //   const thenBranch = this.statement();
+  //   let elseBranch = null;
+  //   if (this.match(TT.ELSE)) {
+  //     elseBranch = this.statement();
+  //   }
+  //   return new stmt.If(condition, thenBranch, elseBranch);
+  // }
+
+  // private printStatement(): Stmt {
+  //   const value = this.expression();
+  //   this.consume(TT.SEMICOLON, "Expect ';' after value.");
+  //   return new stmt.Print(value);
+  // }
+
+  // private returnStatement(): Stmt {
+  //   const keyword = this.previous();
+  //   let value = null;
+  //   if (!this.check(TT.SEMICOLON)) {
+  //     value = this.expression();
+  //   }
+  //   this.consume(TT.SEMICOLON, "Expect ';' after return value.");
+  //   return new stmt.Return(keyword, value);
+  // }
+
+  // private varDeclaration() {
+  //   const name = this.consume(TT.IDENTIFIER, "Expect variable name.");
+  //   let initializer = null;
+  //   if (this.match(TT.EQUAL)) {
+  //     initializer = this.expression();
+  //   }
+  //   this.consume(TT.SEMICOLON, "Expect ';' after variable declaration.");
+  //   return new stmt.Var(name, initializer);
+  // }
+
+  // private whileStatement() {
+  //   this.consume(TT.LEFT_PAREN, "Expect '(' after 'while'.");
+  //   const condition = this.expression();
+  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after condition.");
+  //   const body = this.statement();
+  //   return new stmt.While(condition, body);
+  // }
+
+  private expressionStatement(): Stmt {
+    const expr = this.expression();
+    this.consume(TT.SEMICOLON, "Expect ';' after expression.");
+    return new stmt.Expression(expr);
+  }
+
+  private function(kind: string): expr.Function {
+    let name = null;
+    if (this.match(TT.IDENTIFIER)) {
+      name = this.previous();
+    }
+    this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
+    const params: Token[] = [];
+    if (!this.check(TT.RIGHT_PAREN)) {
+      do {
+        if (params.length >= 255) {
+          this.error(this.peek(), "Can't have more than 255 parameters.");
+        }
+        params.push(this.consume(TT.IDENTIFIER, "Expect parameter name."));
+      } while (this.match(TT.COMMA));
+    }
+    this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
+    this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
+    const body = this.block();
+    return new expr.Function(name, params, body);
+  }
+
+  private block(): Stmt[] {
+    const statements = [];
+    while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
+      const decl = this.declaration();
+      if (decl) {
+        statements.push(decl);
+      }
+    }
+    this.consume(TT.RIGHT_BRACE, "Expect '}' after block.");
+    return statements;
+  }
+
+  // private function(kind: string): stmt.Function {
+  //   const name = this.consume(TT.IDENTIFIER, `Expect ${kind} name.`);
+  //   this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
+  //   const params: Token[] = [];
+  //   if (!this.check(TT.RIGHT_PAREN)) {
+  //     do {
+  //       if (params.length >= 255) {
+  //         this.error(this.peek(), "Can't have more than 255 parameters.");
+  //       }
+  //       params.push(this.consume(TT.IDENTIFIER, "Expect parameter name."));
+  //     } while (this.match(TT.COMMA));
+  //   }
+  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
+  //   this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
+  //   const body = this.block();
+  //   return new stmt.Function(name, params, body);
+  // }
+
+  // private block(): Stmt[] {
+  //   const statements = [];
+  //   while (!this.check(TT.RIGHT_BRACE) && !this.isAtEnd()) {
+  //     const decl = this.declaration();
+  //     if (decl) {
+  //       statements.push(decl);
+  //     }
+  //   }
+  //   this.consume(TT.RIGHT_BRACE, "Expect '}' after block.");
+  //   return statements;
+  // }
+
+  // private assignment(): Expr {
+  //   const exp = this.or();
+  //   if (this.match(TT.EQUAL)) {
+  //     const equals = this.previous();
+  //     const value = this.assignment();
+  //     if (exp instanceof expr.Variable) {
+  //       const name = (exp as expr.Variable).name;
+  //       return new expr.Assign(name, value);
+  //     } else if (exp instanceof expr.Get) {
+  //       const get = exp as expr.Get;
+  //       return new expr.Set(get.object, get.name, value);
+  //     } else if (exp instanceof expr.GetDyn) {
+  //       const get = exp as expr.GetDyn;
+  //       return new expr.SetDyn(get.object, get.dot, get.name, value);
+  //     }
+  //     this.error(equals, "Invalid assignment target.");
+  //   }
+  //   return exp;
+  // }
+
+  // private or(): Expr {
+  //   let exp = this.and();
+  //   while (this.match(TT.OR)) {
+  //     const op = this.previous();
+  //     const right = this.and();
+  //     exp = new expr.Logical(exp, op, right);
+  //   }
+  //   return exp;
+  // }
+
+  // private and(): Expr {
+  //   let exp = this.equality();
+  //   while (this.match(TT.AND)) {
+  //     const op = this.previous();
+  //     const right = this.equality();
+  //     exp = new expr.Logical(exp, op, right);
+  //   }
+  //   return exp;
+  // }
+
+  private equality(): Expr {
+    let exp = this.comparison();
+
+    while (this.match(TT.BANG_EQUAL, TT.EQUAL_EQUAL)) {
+      const operator = this.previous();
+      const right = this.comparison();
+      exp = new expr.Binary(exp, operator, right);
+    }
+
+    return exp;
+  }
+
+  private comparison(): Expr {
+    let exp = this.term();
+    while (this.match(TT.GREATER, TT.GREATER_EQUAL, TT.LESS, TT.LESS_EQUAL)) {
+      const op = this.previous();
+      const right = this.term();
+      exp = new expr.Binary(exp, op, right);
+    }
+    return exp;
+  }
+
+  private term(): Expr {
+    let exp = this.factor();
+    while (this.match(TT.MINUS, TT.PLUS)) {
+      const op = this.previous();
+      const right = this.factor();
+      exp = new expr.Binary(exp, op, right);
+    }
+    return exp;
+  }
+
+  private factor(): Expr {
+    let exp = this.unary();
+    while (this.match(TT.SLASH, TT.STAR)) {
+      const op = this.previous();
+      const right = this.unary();
+      exp = new expr.Binary(exp, op, right);
+    }
+    return exp;
+  }
+
+  private unary(): Expr {
+    if (this.match(TT.BANG, TT.MINUS)) {
+      const op = this.previous();
+      const right = this.unary();
+      return new expr.Unary(op, right);
+    }
+    return this.primary();
+    // return this.call();
+  }
+
+  // private finishCall(callee: Expr): Expr {
+  //   const args: Expr[] = [];
+  //   if (!this.check(TT.RIGHT_PAREN)) {
+  //     do {
+  //       if (args.length >= 255) {
+  //         this.error(this.peek(), "Can't have more than 255 arguments.");
+  //       }
+  //       args.push(this.expression());
+  //     } while (this.match(TT.COMMA));
+  //   }
+  //   const paren = this.consume(TT.RIGHT_PAREN, "Expect ')' after arguments.");
+  //   return new expr.Call(callee, paren, args);
+  // }
+
+  // private call(): Expr {
+  //   let exp = this.primary();
+  //   while (true) {
+  //     if (this.match(TT.LEFT_PAREN)) {
+  //       exp = this.finishCall(exp);
+  //     } else if (this.match(TT.DOT)) {
+  //       if (this.match(TT.LEFT_PAREN)) {
+  //         const dot = this.previous();
+  //         const name = this.expression();
+  //         this.consume(TT.RIGHT_PAREN, "Expect ')' after expression.");
+  //         exp = new expr.GetDyn(exp, dot, name);
+  //       } else {
+  //         // Converts identifier-property accesses into dynamic
+  //         // get, but dynamic get handler also returns nil
+  //         // for not-found properties.
+  //         // const name = this.consume(
+  //         //   TT.IDENTIFIER,
+  //         //   "Expect property name after '.'.",
+  //         // );
+  //         // const propName = new expr.Literal(name.lexeme);
+  //         // exp = new expr.GetDyn(exp, name, propName);
+
+  //         const name = this.consume(
+  //           TT.IDENTIFIER,
+  //           "Expect property name after '.'.",
+  //         );
+  //         exp = new expr.Get(exp, name);
+  //       }
+  //     } else {
+  //       break;
+  //     }
+  //   }
+  //   return exp;
+  // }
+
+  private primary(): Expr {
+    if (this.match(TT.FALSE)) return new expr.Literal(true);
+    if (this.match(TT.TRUE)) return new expr.Literal(false);
+    if (this.match(TT.NIL)) return new expr.Literal(null);
+
+    if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
+    if (this.match(TT.STRING)) return new expr.Literal(this.previous().literal);
+
+    // if (this.match(TT.SUPER)) {
+    //   const keyword = this.previous();
+    //   this.consume(TT.DOT, "Expect '.' after 'super'.");
+    //   const method = this.consume(
+    //     TT.IDENTIFIER,
+    //     "Expect superclass method name.",
+    //   );
+    //   return new expr.Super(keyword, method);
+    // }
+
+    // if (this.match(TT.THIS)) return new expr.This(this.previous());
+
+    // if (this.match(TT.IDENTIFIER)) {
+    //   return new expr.Variable(this.previous());
+    // }
+
+    if (this.match(TT.LEFT_PAREN)) {
+      const exp = this.expression();
+      this.consume(TT.RIGHT_PAREN, "Expect ')' after expression.");
+      return new expr.Grouping(exp);
+    }
+
+    if (this.match(TT.FUN)) {
+      return this.function("function");
+    }
+
+    throw this.error(this.peek(), "Expect expression.");
+  }
+
+  // private lambda(kind: string): expr.Lambda {
+  //   let name = null;
+  //   if (this.match(TT.IDENTIFIER)) {
+  //     name = this.previous();
+  //   }
+  //   this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
+  //   const params: Token[] = [];
+  //   if (!this.check(TT.RIGHT_PAREN)) {
+  //     do {
+  //       if (params.length >= 255) {
+  //         this.error(this.peek(), "Can't have more than 255 parameters.");
+  //       }
+  //       params.push(this.consume(TT.IDENTIFIER, "Expect parameter name."));
+  //     } while (this.match(TT.COMMA));
+  //   }
+  //   this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
+  //   this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
+  //   const body = this.block();
+  //   return new expr.Lambda(name, params, body);
+  // }
+
+  private match(...types: TokenType[]): boolean {
+    for (const typ of types) {
+      if (this.check(typ)) {
+        this.advance();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private consume(typ: TokenType, message: string): Token {
+    if (this.check(typ)) return this.advance();
+    throw this.error(this.peek(), message);
+  }
+
+  private check(type: TokenType): boolean {
+    if (this.isAtEnd()) return false;
+    return this.peek().type === type;
+  }
+
+  private advance(): Token {
+    if (!this.isAtEnd()) this.current++;
+    return this.previous();
+  }
+
+  private isAtEnd(): boolean {
+    return this.peek().type === TT.EOF;
+  }
+
+  private peek(): Token {
+    return this.tokens[this.current];
+  }
+
+  private previous(): Token {
+    return this.tokens[this.current - 1];
+  }
+
+  private error(token: Token, message: string): ParseError {
+    Obi.errorToken(token, message);
+    return new ParseError();
+  }
+
+  private synchronize() {
+    this.advance();
+    while (!this.isAtEnd()) {
+      if (this.previous().type == TT.SEMICOLON) return;
+      switch (this.peek().type) {
+        case TT.CLASS:
+        case TT.FUN:
+        case TT.VAR:
+        case TT.FOR:
+        case TT.IF:
+        case TT.WHILE:
+        case TT.PRINT:
+        case TT.RETURN:
+          return;
+      }
+      this.advance();
+    }
   }
 }
 
@@ -204,6 +1084,10 @@ class Scanner {
         this.addToken(TT.TILDE);
         this.column += 1;
         break;
+      case "_":
+        this.addToken(TT.UNDERSCORE);
+        this.column += 1;
+        break;
       case "!":
         if (this.match("=")) {
           this.addToken(TT.BANG_EQUAL);
@@ -245,7 +1129,7 @@ class Scanner {
           // A comment goes until the end of the line.
           while (this.peek() !== "\n" && !this.isAtEnd()) this.advance();
           const text = this.source.substring(this.start, this.current);
-          this.addTokenLiteral(TT.COMMENT, new Value(ValueType.STRING, text));
+          // this.addTokenLiteral(TT.COMMENT, text);
           this.column += text.length; // handles unicode poorly
         } else {
           this.addToken(TT.SLASH);
@@ -271,6 +1155,8 @@ class Scanner {
         break;
 
       case "\n":
+        // add back in for formatter
+        // this.addToken(TT.NEWLINE);
         this.line++;
         this.column = 1;
         break;
@@ -313,7 +1199,7 @@ class Scanner {
     );
     this.addTokenLiteral(
       TT.NUMBER,
-      new Value(ValueType.NUMBER, number),
+      number,
     );
   }
 
@@ -368,7 +1254,7 @@ class Scanner {
       ["\\t", "\t"],
       ['\\"', '"'],
     ]);
-    this.addTokenLiteral(TT.STRING, new Value(ValueType.STRING, value));
+    this.addTokenLiteral(TT.STRING, value);
     this.column += (this.current - this.start); // handles unicode poorly
   }
 
@@ -415,7 +1301,7 @@ class Scanner {
     this.addTokenLiteral(typ, null);
   }
 
-  private addTokenLiteral(typ: TokenType, literal: Value | null) {
+  private addTokenLiteral(typ: TokenType, literal: any) {
     const text = this.source.substring(this.start, this.current);
     this.tokens.push(new Token(typ, text, literal, this.line, this.column));
   }
@@ -426,7 +1312,7 @@ class Scanner {
 }
 
 module Obi {
-  // export let interpreter: Interpreter = new Interpreter();
+  export let interpreter: Interpreter = new Interpreter();
   export let hadError: boolean = false;
   export let hadRuntimeError: boolean = false;
 
@@ -452,10 +1338,10 @@ module Obi {
     }
   };
 
-  // export const runtimeError = (err: RuntimeError) => {
-  //   console.error(err.message + `\n[line ${err.token.line}]`);
-  //   hadRuntimeError = true;
-  // };
+  export const runtimeError = (err: RuntimeError) => {
+    console.error(err.message + `\n[line ${err.token.line}]`);
+    hadRuntimeError = true;
+  };
 }
 
 const ENC = new TextEncoder();
@@ -468,17 +1354,20 @@ function run(source: string) {
     console.log(token.toString());
   }
 
-  // const parser = new Parser(tokens);
+  const parser = new Parser(tokens);
+  const statements = parser.parse();
+  console.log(statements);
   // const statements = parser.parse();
 
   // if (Obi.hadError) return;
 
-  // const resolver = new Resolver(Lox.interpreter);
+  // const resolver = new Resolver(Obi.interpreter);
   // resolver.resolveStmts(statements);
 
-  // if (Obi.hadError) return;
+  if (Obi.hadError) return;
 
-  // Obi.interpreter.interpret(statements);
+  const result = Obi.interpreter.interpret(statements);
+  console.log(result);
 }
 
 async function runFile(file: string) {
@@ -486,7 +1375,7 @@ async function runFile(file: string) {
   run(contents);
 
   if (Obi.hadError) Deno.exit(65);
-  // if (Lox.hadRuntimeError) Deno.exit(70);
+  if (Obi.hadRuntimeError) Deno.exit(70);
 }
 
 {

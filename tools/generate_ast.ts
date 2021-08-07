@@ -55,6 +55,7 @@ const defineAst = (baseName: string, types: string[]) => {
     // "SetDyn   = object: Expr, dot: Token, name: Expr, value: Expr",
     // "Super    = keyword: Token, method: Token",
     // "This     = keyword: Token",
+    "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
     "Grouping = expression: Expr",
     // "Lambda   = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
     "Literal  = value: any",
@@ -66,9 +67,9 @@ const defineAst = (baseName: string, types: string[]) => {
   console.log(`\nexport module stmt {
   type Expr = expr.Expr;`);
   defineAst("Stmt", [
-    // "Block      = statements: Stmt[]",
+    "Block      = statements: Stmt[]",
     // "Class      = name: Token, superclass: expr.Variable | null, methods: Function[]",
-    // "Expression = expression: Expr",
+    "Expression = expression: Expr",
     // "Function   = name: Token, parameters: Token[], body: Stmt[]",
     // "If         = condition: Expr, thenBranch: Stmt, elseBranch: Stmt | null",
     // "Print      = expression: Expr",
