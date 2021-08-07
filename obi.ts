@@ -1367,17 +1367,11 @@ class Parser {
     this.advance();
     while (!this.isAtEnd()) {
       if (this.previous().type == TT.SEMICOLON) return;
-      // No actual statement beginners yet.
-      // switch (this.peek().type) {
-      //   case TT.CLASS:
-      //   // case TT.FUN:
-      //   case TT.VAR:
-      //   case TT.FOR:
-      //   case TT.IF:
-      //   case TT.RETURN:
-      //   // case TT.MATCH:
-      //     return;
-      // }
+      switch (this.peek().type) {
+        case TT.CLASS:
+        case TT.RETURN:
+          return;
+      }
       this.advance();
     }
   }
