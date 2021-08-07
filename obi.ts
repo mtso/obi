@@ -45,6 +45,8 @@ enum TokenType {
 
   // Keywords.
   AND,
+  ASYNC,
+  AWAIT,
   CLASS,
   ELSE,
   FALSE,
@@ -1510,6 +1512,8 @@ class Scanner {
   private static initKeywords(): Map<string, TokenType> {
     const keywords = new Map<string, TokenType>();
     keywords.set("and", TT.AND);
+    keywords.set("async", TT.ASYNC);
+    keywords.set("await", TT.AWAIT);
     keywords.set("class", TT.CLASS);
     keywords.set("else", TT.ELSE);
     keywords.set("false", TT.FALSE);
