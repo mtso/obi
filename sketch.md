@@ -68,3 +68,31 @@ result := <-fetch <~result.json()
 
 result := <~http.fetch(URL, { method: "GET", }) json := <~result.json()
 resp.write(json) }
+
+match 5 ( 5 -> print("is 5"); 4 -> print("is 4"); );
+
+5 :: ( 5 -> print("is 5"); 4 -> print("is 4"); );
+
+match (a, b) ( 5, 3 -> )
+
+Match expr | discriminants | patterns
+
+Pattern expression a -> b
+
+myBANF matchExpr : "match" expr+ "(" caseExpr+ ")" caseExpr : pattern "->"
+statement pattern : literal
+
+if (this.match(TT.MATCH)) { this.matchExpression(); } matchExpression(): Expr {
+if () }
+
+given x when y then z match 5 ( )
+
+match fetch("/api") (
+
+)
+
+5 match ()
+
+fetch("/api") match ( 5 -> )
+
+match getN() { 5 -> } >

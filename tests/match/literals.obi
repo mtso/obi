@@ -1,0 +1,8 @@
+match 5 {
+  5 -> print("is 5");
+  4 -> print("is 4");
+};
+
+trailing(match 5 { 5 -> wot, _ -> other }, somethingElse) {
+  what to do??
+}

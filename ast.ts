@@ -1,6 +1,6 @@
 /* THIS FILE WAS GENERATED */
 
-import { Token } from "./obi.ts";
+import { Case, Token } from "./obi.ts";
 
 export module expr {
   export abstract class Expr {
@@ -13,6 +13,7 @@ export module expr {
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
+    visitMatchExpr: (exp: Match) => T;
     visitUnaryExpr: (exp: Unary) => T;
     visitVariableExpr: (exp: Variable) => T;
   };
@@ -94,6 +95,21 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitLiteralExpr(this);
+    }
+  }
+  export class Match extends Expr {
+    where: Token;
+    against: Expr;
+    cases: Case[];
+
+    constructor(where: Token, against: Expr, cases: Case[]) {
+      super();
+      this.where = where;
+      this.against = against;
+      this.cases = cases;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitMatchExpr(this);
     }
   }
   export class Unary extends Expr {

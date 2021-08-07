@@ -34,7 +34,6 @@ enum TokenType {
   RIGHT_BRACE,
   COMMA,
   DOT,
-  MINUS,
   PLUS,
   SEMICOLON,
   SLASH,
@@ -56,6 +55,9 @@ enum TokenType {
   COLON_COLON,
   COLON_EQUAL,
 
+  MINUS,
+  MINUS_LESS,
+
   // Literals.
   IDENTIFIER,
   STRING,
@@ -70,6 +72,7 @@ enum TokenType {
   FUN,
   FOR,
   IF,
+  MATCH,
   NIL,
   OR,
   RETURN,
@@ -309,6 +312,10 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.resolveStmts(stm.statements);
     this.endScope();
   }
+  // visitCaseStmt(stm: stmt.Case) {
+  //   this.resolveExpr(stm.pattern);
+  //   this.resolveStmt(stm.branch);
+  // }
   visitExpressionStmt(stm: stmt.Expression) {
     this.resolveExpr(stm.expression);
   }
@@ -352,6 +359,13 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   //   this.resolveExpr(exp.object);
   // }
   visitLiteralExpr(exp: expr.Literal) {}
+  visitMatchExpr(exp: expr.Match) {
+    this.resolveExpr(exp.against);
+    for (const case_ of exp.cases) {
+      this.resolveExpr(case_.pattern);
+      this.resolveStmt(case_.branch);
+    }
+  }
   visitUnaryExpr(exp: expr.Unary) {
     this.resolveExpr(exp.right);
   }
@@ -441,6 +455,10 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   visitBlockStmt(stm: stmt.Block) {
     this.executeBlock(stm.statements, new Environment(this.environment));
   }
+  // visitCaseStmt(stm: stmt.Case) {
+  //   const pattern = this.evaluate(stm.pattern);
+  //   if (this.isEqual(pattern, ))
+  // }
   visitExpressionStmt(stm: stmt.Expression) {
     this.evaluate(stm.expression);
   }
@@ -560,6 +578,19 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   //   (object as LoxInstance).set(exp.name, value);
   //   return value;
   // }
+  visitMatchExpr(exp: expr.Match): any {
+    const against = this.evaluate(exp.against);
+
+    for (const case_ of exp.cases) {
+      const pattern = this.evaluate(case_.pattern);
+      if (this.isEqual(pattern, against)) {
+        return this.execute(case_.branch);
+      }
+    }
+
+    Obi.errorToken(exp.where, "Un-matched match block.");
+    return null;
+  }
   visitUnaryExpr(exp: expr.Unary): any {
     const right = this.evaluate(exp.right);
     switch (exp.operator.type) {
@@ -600,7 +631,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     return true;
   }
 
-  private isEqual(a: any, b: any): boolean {
+  public isEqual(a: any, b: any): boolean {
     if (null == a && null == b) return true;
     else if (null == a) return false;
     return a === b;
@@ -631,6 +662,37 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     const longNum = new Float64Array(buffer); // so equivalent to Float64
     longNum[0] = num;
     return Array.from(new Int8Array(buffer)).reverse(); // reverse to get little endian
+  }
+}
+
+export class Pattern extends Callable {
+  expression: any;
+
+  constructor(expression: any) {
+    super();
+    this.expression = expression;
+  }
+  arity(): number {
+    return 1;
+  }
+
+  call(interpreter: Interpreter, args: any[]): any {
+    if (interpreter.isEqual(this.expression, args[0])) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+// "Case       = pattern: Expr, branch: Stmt",
+
+export class Case {
+  pattern: Expr;
+  branch: Stmt;
+
+  constructor(pattern: Expr, branch: Stmt) {
+    this.pattern = pattern;
+    this.branch = branch;
   }
 }
 
@@ -898,6 +960,19 @@ class Parser {
   //   return exp;
   // }
 
+  // if match was an infix construct
+  // private match(): Expr {
+  //   let exp = this.equality();
+
+  //   while (this.match(TT.MATCH)) {
+  //     const operator = this.previous();
+  //     const right = this.equality();
+  //     exp = new expr.Binary(exp, operator, right);
+  //   }
+
+  //   return exp;
+  // }
+
   private equality(): Expr {
     let exp = this.comparison();
 
@@ -1033,7 +1108,53 @@ class Parser {
       return this.function("function");
     }
 
+    if (this.match(TT.MATCH)) {
+      return this.matchExpression();
+    }
+
     throw this.error(this.peek(), "Expect expression.");
+  }
+
+  private matchExpression(): Expr {
+    const where = this.previous();
+    const against = this.expression();
+    this.consume(
+      TT.LEFT_BRACE,
+      "Expect '{' after discriminant in match statement.",
+    );
+    // this.consume(TT.LEFT_PAREN, "Expect '(' after discriminant in match statement.");
+    if (this.peek().type === TT.RIGHT_BRACE) {
+      // if (this.peek().type === TT.RIGHT_PAREN) {
+      throw this.error(this.previous(), "Expect non-empty match expression.");
+    }
+    const cases = [];
+    while (!this.check(TT.RIGHT_BRACE)) {
+      cases.push(this.case_());
+    }
+    this.consume(TT.RIGHT_BRACE, "Expect '}' after match cases.");
+    return new expr.Match(where, against, cases);
+  }
+
+  private case_(): Case {
+    const pattern = this.expression();
+    this.consume(TT.MINUS_LESS, "Expect '->' after pattern in case.");
+    const branch = this.statement();
+    return new Case(pattern, branch);
+  }
+
+  // private caseStatement(): Stmt {
+  //   const pattern = this.expression();
+  //   this.consume(TT.MINUS_LESS, "Expect '->' after pattern in case.");
+  //   const branch = this.statement();
+  //   return new Case(pattern, branch);
+  // }
+
+  private pattern(): Expr {
+    if (this.match(TT.NUMBER)) {
+      return new expr.Literal(this.previous().literal);
+    }
+
+    throw this.error(this.peek(), "Expect number in pattern.");
   }
 
   // private lambda(kind: string): expr.Lambda {
@@ -1142,6 +1263,7 @@ class Scanner {
     keywords.set("for", TT.FOR);
     keywords.set("fun", TT.FUN);
     keywords.set("if", TT.IF);
+    keywords.set("match", TT.MATCH);
     keywords.set("nil", TT.NIL);
     keywords.set("or", TT.OR);
     keywords.set("return", TT.RETURN);
@@ -1196,10 +1318,6 @@ class Scanner {
         this.addToken(TT.DOT);
         this.column += 1;
         break;
-      case "-":
-        this.addToken(TT.MINUS);
-        this.column += 1;
-        break;
       case "+":
         this.addToken(TT.PLUS);
         this.column += 1;
@@ -1219,6 +1337,15 @@ class Scanner {
       case "_":
         this.addToken(TT.UNDERSCORE);
         this.column += 1;
+        break;
+      case "-":
+        if (this.match(">")) {
+          this.addToken(TT.MINUS_LESS);
+          this.column += 2;
+        } else {
+          this.addToken(TT.MINUS);
+          this.column += 1;
+        }
         break;
       case "!":
         if (this.match("=")) {
