@@ -43,7 +43,7 @@ const defineAst = (baseName: string, types: string[]) => {
 
 {
   console.log(`/* THIS FILE WAS GENERATED */\n`);
-  console.log(`import { Token, Case } from "./obi.ts";`);
+  console.log(`import { Case, Token } from "./obi.ts";`);
   console.log(`\nexport module expr {`);
   defineAst("Expr", [
     "Assign   = name: Token, value: Expr",
@@ -60,7 +60,7 @@ const defineAst = (baseName: string, types: string[]) => {
     // "Lambda   = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
     "Literal  = value: any",
     "Match    = where: Token, against: Expr, cases: Case[]",
-    // "Logical  = left: Expr, operator: Token, right: Expr",
+    "Logical  = left: Expr, operator: Token, right: Expr",
     "Unary    = operator: Token, right: Expr",
     "Variable = name: Token",
   ]);

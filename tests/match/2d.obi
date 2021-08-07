@@ -1,0 +1,16 @@
+fun while(p, f) {
+  match (p()) {
+    true -> {
+      f();
+      while(p, f);
+    }
+    false -> nil;
+  };
+}
+
+i := 0; j := 0; while() { i < 5 and j < 5; } {
+  print(i);
+  print(j);
+  i = i + 1;
+  j = j + 2;
+};

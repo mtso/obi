@@ -14,6 +14,7 @@ export module expr {
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
     visitMatchExpr: (exp: Match) => T;
+    visitLogicalExpr: (exp: Logical) => T;
     visitUnaryExpr: (exp: Unary) => T;
     visitVariableExpr: (exp: Variable) => T;
   };
@@ -110,6 +111,21 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitMatchExpr(this);
+    }
+  }
+  export class Logical extends Expr {
+    left: Expr;
+    operator: Token;
+    right: Expr;
+
+    constructor(left: Expr, operator: Token, right: Expr) {
+      super();
+      this.left = left;
+      this.operator = operator;
+      this.right = right;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitLogicalExpr(this);
     }
   }
   export class Unary extends Expr {

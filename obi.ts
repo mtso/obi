@@ -357,6 +357,10 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   //   this.resolveExpr(exp.object);
   // }
   visitLiteralExpr(exp: expr.Literal) {}
+  visitLogicalExpr(exp: expr.Logical) {
+    this.resolveExpr(exp.left);
+    this.resolveExpr(exp.right);
+  }
   visitMatchExpr(exp: expr.Match) {
     this.resolveExpr(exp.against);
     for (const case_ of exp.cases) {
@@ -417,18 +421,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
   }
-  // interpret(expr: Expr): any {
-  //   try {
-  //     return this.evaluate(expr);
-  //   } catch (err) {
-  //     if (err instanceof RuntimeError) {
-  //       Obi.hadRuntimeError = true;
-  //       return null;
-  //     } else {
-  //       throw err;
-  //     }
-  //   }
-  // }
   private evaluate(expr: Expr): any {
     return expr.accept(this);
   }
@@ -567,6 +559,15 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   }
   visitLiteralExpr(exp: expr.Literal): any {
     return exp.value;
+  }
+  visitLogicalExpr(exp: expr.Logical): any {
+    const left = this.evaluate(exp.left);
+    if (exp.operator.type == TT.OR) {
+      if (this.isTruthy(left)) return left;
+    } else {
+      if (!this.isTruthy(left)) return left;
+    }
+    return this.evaluate(exp.right);
   }
   // visitSetExpr(exp: expr.Set): any {
   //   const object = this.evaluate(exp.object);
@@ -738,7 +739,6 @@ class Parser {
       if (this.match(TT.FUN)) {
         return new stmt.Expression(this.function("function"));
       }
-      // if (this.match(TT.VAR)) return this.varDeclaration();
       if (
         this.check(TT.IDENTIFIER) && this.peekNext().type === TT.COLON_EQUAL
       ) {
@@ -938,8 +938,8 @@ class Parser {
   // }
 
   private assignment(): Expr {
-    const exp = this.equality();
-    // const exp = this.or();
+    // const exp = this.equality();
+    const exp = this.or();
     if (this.match(TT.EQUAL)) {
       const equals = this.previous();
       const value = this.assignment();
@@ -958,25 +958,25 @@ class Parser {
     return exp;
   }
 
-  // private or(): Expr {
-  //   let exp = this.and();
-  //   while (this.match(TT.OR)) {
-  //     const op = this.previous();
-  //     const right = this.and();
-  //     exp = new expr.Logical(exp, op, right);
-  //   }
-  //   return exp;
-  // }
+  private or(): Expr {
+    let exp = this.and();
+    while (this.match(TT.OR)) {
+      const op = this.previous();
+      const right = this.and();
+      exp = new expr.Logical(exp, op, right);
+    }
+    return exp;
+  }
 
-  // private and(): Expr {
-  //   let exp = this.equality();
-  //   while (this.match(TT.AND)) {
-  //     const op = this.previous();
-  //     const right = this.equality();
-  //     exp = new expr.Logical(exp, op, right);
-  //   }
-  //   return exp;
-  // }
+  private and(): Expr {
+    let exp = this.equality();
+    while (this.match(TT.AND)) {
+      const op = this.previous();
+      const right = this.equality();
+      exp = new expr.Logical(exp, op, right);
+    }
+    return exp;
+  }
 
   // if match was an infix construct
   // private match(): Expr {
