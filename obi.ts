@@ -169,16 +169,19 @@ class ObiFunction extends Callable {
   private declaration: expr.Function;
   private closure: Environment;
   isInitializer: boolean;
+  // isAsync: boolean;
 
   constructor(
     declaration: expr.Function,
     closure: Environment,
     isInitializer: boolean,
+    // isAsync: boolean;
   ) {
     super();
     this.declaration = declaration;
     this.closure = closure;
     this.isInitializer = isInitializer;
+    // this.isAsync = isAsync;
   }
   bind(instance: ObiInstance): ObiFunction {
     const environment = new Environment(this.closure);
@@ -189,6 +192,11 @@ class ObiFunction extends Callable {
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
       environment.define(this.declaration.parameters[i].lexeme, args[i]);
+    }
+    if (this.declaration.isAsync) {
+      const op = new Op(this, args);
+      interpreter.queue.push(op);
+      return op;
     }
     try {
       return interpreter.executeBlock(this.declaration.body, environment);
@@ -551,6 +559,7 @@ module runtime {
 class Op {
   func: ObiFunction;
   args: any[];
+  done: boolean = false;
   constructor(func: ObiFunction, args: any[]) {
     this.func = func;
     this.args = args;
@@ -601,12 +610,29 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
+    class RtSleep extends Callable {
+      arity(): number {
+        return 1;
+      }
+
+      call(interpreter: Interpreter, args: any[]): any {
+        const start = Date.now();
+        const by = args[0];
+        const until = start + (by * 1000);
+        while (Date.now() < until) {
+          // sleep
+        }
+        return null;
+      }
+    }
+
     this.globals.define("delay", new RtDelay());
+    this.globals.define("sleep", new RtSleep());
   }
   // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
 
   interpret2(statements: Stmt[]) {
-    const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
+    const topLevel = new ObiFunction(new expr.Function(null, [], statements, true), this.environment, false);
     this.queue.push(new Op(topLevel, []));
 
     while (this.queue.length > 0) {
@@ -614,24 +640,26 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       if (!op) break;
       if (op.shouldRun()) {
         op.func.call(this, op.args);
+        op.done = true;
       } else {
         this.queue.push(op);
       }
     }
   }
 
-  interpret(statements: Stmt[]) {
-    try {
-      for (const statement of statements) {
-        const _ = this.execute(statement);
-      }
-    } catch (err) {
-      if (err instanceof RuntimeError) {
-        Obi.runtimeError(err);
-      } else {
-        throw err;
-      }
-    }
+  interpret(statements: Stmt[]): any {
+    return this.executeBlock(statements, this.environment);
+    // try {
+    //   for (const statement of statements) {
+    //     const _ = this.execute(statement);
+    //   }
+    // } catch (err) {
+    //   if (err instanceof RuntimeError) {
+    //     Obi.runtimeError(err);
+    //   } else {
+    //     throw err;
+    //   }
+    // }
   }
   private evaluate(expr: Expr): any {
     return expr.accept(this);
@@ -642,6 +670,27 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   resolve(exp: Expr, depth: number) {
     this.locals.set(exp, depth);
   }
+  // executeStatements(op: Op, environment: Environment): any {
+  //   const previous = this.environment;
+  //   let returnValue = null;
+  //   try {
+  //     this.environment = environment;
+  //     for (const statement of statements) {
+  //       try {
+  //         returnValue = this.execute(statement);
+  //       } catch (err) {
+  //         if (err instanceof Yield) {
+  //           break;
+  //         } else {
+  //           throw err;
+  //         }
+  //       }
+  //     }
+  //   } finally {
+  //     this.environment = previous;
+  //   }
+  //   return returnValue;
+  // }
   executeBlock(statements: Stmt[], environment: Environment): any {
     const previous = this.environment;
     let returnValue = null;
@@ -930,6 +979,9 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
   static stringify(object: any) {
     if (null === object) return "nil";
+    if (object instanceof Op) {
+      return "<op>";
+    }
     if (typeof object === "number") {
       if (object === 0) {
         const bytes = Interpreter.doubleToByteArray(object);
@@ -1085,6 +1137,10 @@ class Parser {
 
   private function(kind: string): expr.Function {
     let name = null;
+    let isAsync = false;
+    if (this.match(TT.TILDE)) {
+      isAsync = true;
+    }
     if (this.match(TT.IDENTIFIER)) {
       name = this.previous();
     }
@@ -1101,7 +1157,7 @@ class Parser {
     this.consume(TT.RIGHT_PAREN, "Expect ')' after parameters.");
     this.consume(TT.LEFT_BRACE, `Expect '{' before ${kind} body.`);
     const body = this.block();
-    return new expr.Function(name, params, body);
+    return new expr.Function(name, params, body, isAsync);
   }
 
   private block(): Stmt[] {
@@ -1119,7 +1175,7 @@ class Parser {
   private anonymousFunction(): Expr {
     this.consume(TT.LEFT_BRACE, "Expect '{' to begin anonymous function.");
     const body = this.block();
-    return new expr.Function(null, [], body);
+    return new expr.Function(null, [], body, false); // fixme and support async anon func
   }
 
   private assignment(): Expr {
@@ -1827,7 +1883,8 @@ function run(source: string) {
 
   if (Obi.hadError) return;
 
-  Obi.interpreter.interpret2(statements);
+  Obi.interpreter.interpret(statements);
+  // Obi.interpreter.interpret2(statements);
 }
 
 async function runFile(file: string) {

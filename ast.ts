@@ -155,12 +155,14 @@ export module expr {
     name: Token | null;
     parameters: Token[];
     body: stmt.Stmt[];
+    isAsync: boolean;
 
-    constructor(name: Token | null, parameters: Token[], body: stmt.Stmt[]) {
+    constructor(name: Token | null, parameters: Token[], body: stmt.Stmt[], isAsync: boolean) {
       super();
       this.name = name;
       this.parameters = parameters;
       this.body = body;
+      this.isAsync = isAsync;
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitFunctionExpr(this);
@@ -272,11 +274,7 @@ export module stmt {
     superclass: expr.Variable | null;
     methods: expr.Function[];
 
-    constructor(
-      name: Token,
-      superclass: expr.Variable | null,
-      methods: expr.Function[],
-    ) {
+    constructor(name: Token, superclass: expr.Variable | null, methods: expr.Function[]) {
       super();
       this.name = name;
       this.superclass = superclass;

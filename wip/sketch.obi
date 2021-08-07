@@ -1,4 +1,6 @@
-delay(fun() {
-  print("bye");
-}, 2);
-print("hi");
+fun~ life() {
+    return 42;
+}
+
+print(life());
+print("1");

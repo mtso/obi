@@ -1,0 +1,35 @@
+async fun life() {
+  return 42;
+}
+
+m := life();
+print("hi");
+print(await m);
+
+
+
+
+async fun life() {
+  return 42;
+}
+m1 := life(); // Future<42>
+m2 := life(); // Future<42>
+await m2;
+await m1;
+
+
+
+
+i := await get();
+print(i);
+
+fun doStuff() {
+  print("1");
+  yield;
+  print("2");
+}
+
+doStuff();
+// print 1
+// push event
+// pop print 2

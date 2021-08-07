@@ -55,7 +55,7 @@ const defineAst = (baseName: string, types: string[]) => {
     "SetDyn   = object: Expr, dot: Token, name: Expr, value: Expr",
     "Super    = keyword: Token, method: Token",
     "This     = keyword: Token",
-    "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
+    "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[], isAsync: boolean",
     "Grouping = expression: Expr",
     "Literal  = value: any",
     "Match    = where: Token, against: Expr, cases: Case[]",
