@@ -1,14 +1,16 @@
-(fun executeStuff() {
+fun executeStuff() {
     print(3 / 4);
     print(5 + 6);
 
-    (fun executeStuff'() {
+    fun executeStuff'() {
         print("inner");
-
-    });
+    }
 
     executeStuff'();
-
-});
+}
 
 executeStuff();
+// expect: "0.75"
+// expect: "11"
+
+// expect: "inner"

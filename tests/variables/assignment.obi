@@ -1,4 +1,8 @@
 a := 5;
 a' := a + 5;
+print(a');
+// expect: "10"
 b := nil;
+print(b);
+// expect: "nil"
 a;

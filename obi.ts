@@ -530,7 +530,7 @@ module runtime {
       return 1;
     }
     call(interpreter: Interpreter, args: any[]): any {
-      console.log(args[0]);
+      console.log(Interpreter.stringify(args[0]));
     }
     toString(): string {
       return "<native fn>";

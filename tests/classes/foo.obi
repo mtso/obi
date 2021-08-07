@@ -10,6 +10,8 @@ class Foo {
 
 foo := Foo();
 foo.print();
+// expect: "a"
 foo.doF() {
   print("f");
 };
+// expect: "f"

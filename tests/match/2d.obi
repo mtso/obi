@@ -14,3 +14,9 @@ i := 0; j := 0; while() { i < 5 and j < 5; } {
   i = i + 1;
   j = j + 2;
 };
+// expect: "0"
+// expect: "0"
+// expect: "1"
+// expect: "2"
+// expect: "2"
+// expect: "4"

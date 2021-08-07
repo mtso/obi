@@ -3,4 +3,4 @@ a := match true {
   false -> 3;
 };
 
-print(a);
+print(a); // expect: "5"
