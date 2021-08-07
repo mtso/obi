@@ -48,7 +48,7 @@ const defineAst = (baseName: string, types: string[]) => {
   defineAst("Expr", [
     "Assign   = name: Token, value: Expr",
     "Binary   = left: Expr, operator: Token, right: Expr",
-    // "Call     = callee: Expr, paren: Token, args: Expr[]",
+    "Call     = callee: Expr, paren: Token, args: Expr[]",
     // "GetDyn   = object: Expr, dot: Token, name: Expr",
     // "Get      = object: Expr, name: Token",
     // "Set      = object: Expr, name: Token, value: Expr",

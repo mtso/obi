@@ -72,7 +72,6 @@ enum TokenType {
   IF,
   NIL,
   OR,
-  PRINT,
   RETURN,
   SUPER,
   THIS,
@@ -195,21 +194,21 @@ class ObiFunction extends Callable {
     this.closure = closure;
   }
   call(interpreter: Interpreter, args: any[]): any {
-    console.log("called ObiFunction");
-    // const environment = new Environment(this.closure);
-    // for (let i = 0; i < this.declaration.parameters.length; i++) {
-    //   environment.define(this.declaration.parameters[i].lexeme, args[i]);
-    // }
-    // try {
-    //   interpreter.executeBlock(this.declaration.body, environment);
-    // } catch (err) {
-    //   if (err instanceof Return) {
-    //     return (err as Return).value;
-    //   } else {
-    //     throw err;
-    //   }
-    // }
-    // return null;
+    // console.log("called ObiFunction");
+    const environment = new Environment(this.closure);
+    for (let i = 0; i < this.declaration.parameters.length; i++) {
+      environment.define(this.declaration.parameters[i].lexeme, args[i]);
+    }
+    try {
+      interpreter.executeBlock(this.declaration.body, environment);
+    } catch (err) {
+      // if (err instanceof Return) {
+      // return (err as Return).value;
+      // } else {
+      throw err;
+      // }
+    }
+    return null;
   }
   arity(): number {
     return this.declaration.parameters.length;
@@ -329,6 +328,12 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     this.resolveExpr(exp.left);
     this.resolveExpr(exp.right);
   }
+  visitCallExpr(exp: expr.Call) {
+    this.resolveExpr(exp.callee);
+    for (const arg of exp.args) {
+      this.resolveExpr(arg);
+    }
+  }
   visitFunctionExpr(exp: expr.Function) {
     if (null !== exp.name) {
       this.declare(exp.name);
@@ -364,10 +369,28 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   }
 }
 
+module runtime {
+  export class Print extends Callable {
+    arity(): number {
+      return 1;
+    }
+    call(interpreter: Interpreter, args: any[]): any {
+      console.log(args[0]);
+    }
+    toString(): string {
+      return "<native fn>";
+    }
+  }
+}
+
 class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   globals: Environment = new Environment();
   private environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
+
+  constructor() {
+    this.globals.define("print", new runtime.Print());
+  }
 
   interpret(statements: Stmt[]) {
     try {
@@ -419,7 +442,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     this.executeBlock(stm.statements, new Environment(this.environment));
   }
   visitExpressionStmt(stm: stmt.Expression) {
-    console.log("visitExprStmt", this.evaluate(stm.expression));
+    this.evaluate(stm.expression);
   }
   visitVarStmt(stm: stmt.Var) {
     let value = null;
@@ -484,8 +507,25 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
     // Unreachable.
     return null;
   }
+  visitCallExpr(exp: expr.Call): any {
+    let callee = this.evaluate(exp.callee);
+    const args: any[] = [];
+    for (const arg of exp.args) {
+      args.push(this.evaluate(arg));
+    }
+    if (!(callee instanceof Callable)) {
+      throw new RuntimeError(exp.paren, "Can only call functions.");
+    }
+    const func = callee as Callable;
+    if (args.length !== func.arity()) {
+      throw new RuntimeError(
+        exp.paren,
+        `Expected ${func.arity()} arguments but got ${args.length}.`,
+      );
+    }
+    return func.call(this, args);
+  }
   visitFunctionExpr(exp: expr.Function): any {
-    console.log("visitFunctionExpr");
     const func = new ObiFunction(exp, this.environment);
     if (null !== exp.name) {
       this.environment.define(exp.name.lexeme, func);
@@ -906,58 +946,58 @@ class Parser {
       const right = this.unary();
       return new expr.Unary(op, right);
     }
-    return this.primary();
-    // return this.call();
+    // return this.primary();
+    return this.call();
   }
 
-  // private finishCall(callee: Expr): Expr {
-  //   const args: Expr[] = [];
-  //   if (!this.check(TT.RIGHT_PAREN)) {
-  //     do {
-  //       if (args.length >= 255) {
-  //         this.error(this.peek(), "Can't have more than 255 arguments.");
-  //       }
-  //       args.push(this.expression());
-  //     } while (this.match(TT.COMMA));
-  //   }
-  //   const paren = this.consume(TT.RIGHT_PAREN, "Expect ')' after arguments.");
-  //   return new expr.Call(callee, paren, args);
-  // }
+  private finishCall(callee: Expr): Expr {
+    const args: Expr[] = [];
+    if (!this.check(TT.RIGHT_PAREN)) {
+      do {
+        if (args.length >= 255) {
+          this.error(this.peek(), "Can't have more than 255 arguments.");
+        }
+        args.push(this.expression());
+      } while (this.match(TT.COMMA));
+    }
+    const paren = this.consume(TT.RIGHT_PAREN, "Expect ')' after arguments.");
+    return new expr.Call(callee, paren, args);
+  }
 
-  // private call(): Expr {
-  //   let exp = this.primary();
-  //   while (true) {
-  //     if (this.match(TT.LEFT_PAREN)) {
-  //       exp = this.finishCall(exp);
-  //     } else if (this.match(TT.DOT)) {
-  //       if (this.match(TT.LEFT_PAREN)) {
-  //         const dot = this.previous();
-  //         const name = this.expression();
-  //         this.consume(TT.RIGHT_PAREN, "Expect ')' after expression.");
-  //         exp = new expr.GetDyn(exp, dot, name);
-  //       } else {
-  //         // Converts identifier-property accesses into dynamic
-  //         // get, but dynamic get handler also returns nil
-  //         // for not-found properties.
-  //         // const name = this.consume(
-  //         //   TT.IDENTIFIER,
-  //         //   "Expect property name after '.'.",
-  //         // );
-  //         // const propName = new expr.Literal(name.lexeme);
-  //         // exp = new expr.GetDyn(exp, name, propName);
+  private call(): Expr {
+    let exp = this.primary();
+    while (true) {
+      if (this.match(TT.LEFT_PAREN)) {
+        exp = this.finishCall(exp);
+        // } else if (this.match(TT.DOT)) {
+        //   if (this.match(TT.LEFT_PAREN)) {
+        //     const dot = this.previous();
+        //     const name = this.expression();
+        //     this.consume(TT.RIGHT_PAREN, "Expect ')' after expression.");
+        //     exp = new expr.GetDyn(exp, dot, name);
+        //   } else {
+        //     // Converts identifier-property accesses into dynamic
+        //     // get, but dynamic get handler also returns nil
+        //     // for not-found properties.
+        //     // const name = this.consume(
+        //     //   TT.IDENTIFIER,
+        //     //   "Expect property name after '.'.",
+        //     // );
+        //     // const propName = new expr.Literal(name.lexeme);
+        //     // exp = new expr.GetDyn(exp, name, propName);
 
-  //         const name = this.consume(
-  //           TT.IDENTIFIER,
-  //           "Expect property name after '.'.",
-  //         );
-  //         exp = new expr.Get(exp, name);
-  //       }
-  //     } else {
-  //       break;
-  //     }
-  //   }
-  //   return exp;
-  // }
+        //     const name = this.consume(
+        //       TT.IDENTIFIER,
+        //       "Expect property name after '.'.",
+        //     );
+        //     exp = new expr.Get(exp, name);
+        //   }
+      } else {
+        break;
+      }
+    }
+    return exp;
+  }
 
   private primary(): Expr {
     if (this.match(TT.FALSE)) return new expr.Literal(true);
@@ -1075,7 +1115,6 @@ class Parser {
         case TT.FOR:
         case TT.IF:
         case TT.WHILE:
-        case TT.PRINT:
         case TT.RETURN:
           return;
       }
@@ -1105,7 +1144,6 @@ class Scanner {
     keywords.set("if", TT.IF);
     keywords.set("nil", TT.NIL);
     keywords.set("or", TT.OR);
-    keywords.set("print", TT.PRINT);
     keywords.set("return", TT.RETURN);
     keywords.set("super", TT.SUPER);
     keywords.set("this", TT.THIS);
@@ -1379,7 +1417,7 @@ class Scanner {
   }
 
   private isIdPunctuation(c: string): boolean {
-    return c == "-" || c == "?" || c == "!" || c == "@";
+    return c == "-" || c == "?" || c == "!" || c == "@" || c == "'";
   }
 
   private isAlphaNumeric(c: string): boolean {
@@ -1447,19 +1485,18 @@ function run(source: string) {
   const scanner = new Scanner(source);
   const tokens = scanner.scanTokens();
 
-  for (const token of tokens) {
-    console.log(token.toString());
-  }
+  // for (const token of tokens) {
+  //   console.log(token.toString());
+  // }
 
   const parser = new Parser(tokens);
   const statements = parser.parse();
   console.log(statements);
-  // const statements = parser.parse();
 
-  // if (Obi.hadError) return;
+  if (Obi.hadError) return;
 
-  // const resolver = new Resolver(Obi.interpreter);
-  // resolver.resolveStmts(statements);
+  const resolver = new Resolver(Obi.interpreter);
+  resolver.resolveStmts(statements);
 
   if (Obi.hadError) return;
 

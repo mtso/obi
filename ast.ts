@@ -9,6 +9,7 @@ export module expr {
   export type Visitor<T> = {
     visitAssignExpr: (exp: Assign) => T;
     visitBinaryExpr: (exp: Binary) => T;
+    visitCallExpr: (exp: Call) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
@@ -41,6 +42,21 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitBinaryExpr(this);
+    }
+  }
+  export class Call extends Expr {
+    callee: Expr;
+    paren: Token;
+    args: Expr[];
+
+    constructor(callee: Expr, paren: Token, args: Expr[]) {
+      super();
+      this.callee = callee;
+      this.paren = paren;
+      this.args = args;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitCallExpr(this);
     }
   }
   export class Function extends Expr {

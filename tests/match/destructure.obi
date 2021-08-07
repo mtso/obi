@@ -20,3 +20,10 @@ fun varargs(a, b, c, ...d) {
   // scalar c
   // compound d [0=>d0, 1=>d1, ...]
 }
+
+a := true :: (
+  true -> "true"
+  false -> "false"
+);
+
+a := (b > c) :: ( true -> "true", _ -> "false" );
