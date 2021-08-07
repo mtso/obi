@@ -1,0 +1,27 @@
+buf := "";
+
+fun text(string) {
+    buf = buf + "<text>" + string + "</text>";
+}
+
+fun body(children) {
+    buf = buf + "<body>";
+    children();
+    buf = buf + "</body>";
+}
+
+fun head(children) {
+    buf = buf + "<head>";
+    children();
+    buf = buf + "</head>";
+}
+
+head() {
+    body() {
+        text("hi");
+        text("bye");
+    };
+};
+
+print(buf);
+// expect: "<head><body><text>hi</text><text>bye</text></body></head>"

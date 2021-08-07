@@ -1,0 +1,37 @@
+class Markup {
+    init() {
+        this.buf = "";
+    }
+
+    text(string) {
+        this.buf = this.buf + "<text>" + string + "</text>";
+    }
+
+    body(children) {
+        this.buf = this.buf + "<body>";
+        children();
+        this.buf = this.buf + "</body>";
+    }
+
+    head(children) {
+        this.buf = this.buf + "<head>";
+        children();
+        this.buf = this.buf + "</head>";
+    }
+
+    getMarkup() {
+        return this.buf;
+    }
+}
+
+m := Markup();
+
+m.head() {
+    m.body() {
+        m.text("hi");
+        m.text("bye");
+    };
+};
+
+print(m.getMarkup());
+// expect: "<head><body><text>hi</text><text>bye</text></body></head>"
