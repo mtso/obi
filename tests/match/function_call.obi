@@ -1,0 +1,19 @@
+fun life() {
+    return 42;
+}
+
+match (life()) {
+    42 -> print("got life");
+    _ -> print("hit default");
+};
+// expect: "got life"
+
+fun id(a) {
+    return a;
+}
+
+match (id(life())) {
+    42 -> print("got life again");
+    _ -> print("hit default next");
+};
+// expect: "got life again"
