@@ -165,6 +165,7 @@ enum FunctionType {
 }
 
 class ObiFunction extends Callable {
+  // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
   private declaration: expr.Function;
   private closure: Environment;
   isInitializer: boolean;
@@ -547,13 +548,43 @@ module runtime {
   }
 }
 
+class Op {
+  func: ObiFunction;
+  args: any[];
+  constructor(func: ObiFunction, args: any[]) {
+    this.func = func;
+    this.args = args;
+  }
+  shouldRun(): boolean {
+    return true;
+  }
+}
+
 class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   globals: Environment = new Environment();
   private environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
 
+  queue: Op[] = [];
+
   constructor() {
     this.globals.define("print", new runtime.Print());
+  }
+  // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
+
+  interpret2(statements: Stmt[]) {
+    const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
+    this.queue.push(new Op(topLevel, []));
+
+    while (this.queue.length > 0) {
+      const op = this.queue.pop();
+      if (!op) break;
+      if (op.shouldRun()) {
+        op.func.call(this, op.args);
+      } else {
+        this.queue.push(op);
+      }
+    }
   }
 
   interpret(statements: Stmt[]) {
@@ -1763,7 +1794,7 @@ function run(source: string) {
 
   if (Obi.hadError) return;
 
-  Obi.interpreter.interpret(statements);
+  Obi.interpreter.interpret2(statements);
 }
 
 async function runFile(file: string) {
