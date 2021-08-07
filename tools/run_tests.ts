@@ -80,12 +80,25 @@ async function runTest(filename: string, contents: string): Promise<boolean> {
   let testFiles = await getNames("tests");
   testFiles = testFiles.filter((n) => n.endsWith(".obi"));
   let allGood = true;
+  let succeeded = 0;
+  let failed = 0;
 
   for (const testFile of testFiles) {
     const source = await Deno.readTextFile(testFile);
-    const result = await runTest(testFile, source);
-    allGood = allGood && result;
+    const good = await runTest(testFile, source);
+    if (good) {
+      succeeded += 1;
+    } else {
+      failed += 1;
+      allGood = false;
+    }
   }
 
-  if (!allGood) Deno.exit(65);
+  const total = succeeded + failed;
+  if (allGood) {
+    console.log(`Test Result: ${succeeded}/${total}.`);
+  } else {
+    console.error(`Test Result: ${succeeded}/${total}, ${failed} failed.`);
+    Deno.exit(65);
+  }
 }

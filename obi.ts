@@ -201,6 +201,11 @@ class ObiFunction extends Callable {
     this.closure = closure;
     this.isInitializer = isInitializer;
   }
+  bind(instance: ObiInstance): ObiFunction {
+    const environment = new Environment(this.closure);
+    environment.define("this", instance);
+    return new ObiFunction(this.declaration, environment, this.isInitializer);
+  }
   call(interpreter: Interpreter, args: any[]): any {
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
@@ -294,7 +299,7 @@ class ObiInstance {
       return this.fields.get(name.lexeme);
     }
     const method = this.klass.findMethod(name.lexeme);
-    if (null !== method) return method; //.bind(this);
+    if (null !== method) return method.bind(this);
     throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
   }
   // getDyn(name: any, where: Token): any {
@@ -418,7 +423,7 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     // }
 
     this.beginScope();
-    // this.scopes[this.scopes.length - 1].set("this", true);
+    this.scopes[this.scopes.length - 1].set("this", true);
     for (const method of stm.methods) {
       let declaration = FunctionType.METHOD;
       // if (method.name.lexeme === "init") {
@@ -506,6 +511,13 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
       if (null !== case_.pattern) this.resolveExpr(case_.pattern);
       this.resolveStmt(case_.branch);
     }
+  }
+  visitThisExpr(exp: expr.This) {
+    if (this.currentClass === ClassType.NONE) {
+      Obi.errorToken(exp.keyword, "Can't use 'this' outside of a class.");
+      return;
+    }
+    this.resolveLocal(exp, exp.keyword);
   }
   visitUnaryExpr(exp: expr.Unary) {
     this.resolveExpr(exp.right);
@@ -789,6 +801,9 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
     Obi.errorToken(exp.where, "Un-matched match block.");
     return null;
+  }
+  visitThisExpr(exp: expr.This): any {
+    return this.lookupVariable(exp.keyword, exp);
   }
   visitUnaryExpr(exp: expr.Unary): any {
     const right = this.evaluate(exp.right);
@@ -1329,7 +1344,7 @@ class Parser {
     //   return new expr.Super(keyword, method);
     // }
 
-    // if (this.match(TT.THIS)) return new expr.This(this.previous());
+    if (this.match(TT.THIS)) return new expr.This(this.previous());
 
     if (this.match(TT.IDENTIFIER)) {
       return new expr.Variable(this.previous());

@@ -1,0 +1,10 @@
+class Foo {
+  print() {
+    print(this.name);
+  }
+}
+
+foo := Foo();
+foo.name = "hi";
+foo.print();
+// expect: "hi"

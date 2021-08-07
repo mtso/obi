@@ -12,6 +12,7 @@ export module expr {
     visitCallExpr: (exp: Call) => T;
     visitGetExpr: (exp: Get) => T;
     visitSetExpr: (exp: Set) => T;
+    visitThisExpr: (exp: This) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
@@ -89,6 +90,17 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitSetExpr(this);
+    }
+  }
+  export class This extends Expr {
+    keyword: Token;
+
+    constructor(keyword: Token) {
+      super();
+      this.keyword = keyword;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitThisExpr(this);
     }
   }
   export class Function extends Expr {
