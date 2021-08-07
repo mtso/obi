@@ -735,7 +735,9 @@ class Parser {
   private declaration(): Stmt | null {
     try {
       // if (this.match(TT.CLASS)) return this.classDeclaration();
-      // if (this.match(TT.FUN)) return this.function("function");
+      if (this.match(TT.FUN)) {
+        return new stmt.Expression(this.function("function"));
+      }
       // if (this.match(TT.VAR)) return this.varDeclaration();
       if (
         this.check(TT.IDENTIFIER) && this.peekNext().type === TT.COLON_EQUAL
@@ -899,6 +901,12 @@ class Parser {
     return statements;
   }
 
+  private anonymousFunction(): Expr {
+    this.consume(TT.LEFT_BRACE, "Expect '{' to begin anonymous function.");
+    const body = this.block();
+    return new expr.Function(null, [], body);
+  }
+
   // private function(kind: string): stmt.Function {
   //   const name = this.consume(TT.IDENTIFIER, `Expect ${kind} name.`);
   //   this.consume(TT.LEFT_PAREN, `Expect '(' after ${kind} name.`);
@@ -1046,6 +1054,16 @@ class Parser {
       } while (this.match(TT.COMMA));
     }
     const paren = this.consume(TT.RIGHT_PAREN, "Expect ')' after arguments.");
+
+    while (this.check(TT.LEFT_BRACE)) {
+      // console.log("trailer", this.peek());
+      if (args.length >= 255) {
+        this.error(this.peek(), "Can't have more than 255 arguments.");
+      }
+      const trailing = this.anonymousFunction();
+      args.push(trailing);
+    }
+
     return new expr.Call(callee, paren, args);
   }
 

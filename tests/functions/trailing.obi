@@ -1,6 +1,6 @@
 fun twice(a, b) {
-  b(a());
-  b(a());
+    b(a());
+    b(a());
 }
 
 twice {"hi"} fun (a) {
