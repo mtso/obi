@@ -1,0 +1,14 @@
+(fun while2(p, f) {
+  match p() {
+    true -> {
+      f();
+      while2(p, f);
+    }
+    false -> nil;
+  };
+});
+
+i := 0; while2(fun() { i < 5; }, fun() {
+  print(i);
+  i = i + 1;
+});

@@ -1,0 +1,6 @@
+a := match true {
+  true -> 5;
+  false -> 3;
+};
+
+print(a);

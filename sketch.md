@@ -96,3 +96,15 @@ match fetch("/api") (
 fetch("/api") match ( 5 -> )
 
 match getN() { 5 -> } >
+
+trailing(match 5 { 5 -> wot, _ -> other }, somethingElse) { what to do?? }
+
+a := 5 match ( )
+
+a == 5 match ( )
+
+a := 5 == 4;
+
+a == 5 match ( 5 -> print("5"); )
+
+match 5 ( )

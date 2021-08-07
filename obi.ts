@@ -80,7 +80,6 @@ enum TokenType {
   THIS,
   TRUE,
   VAR,
-  WHILE,
   TEE,
   TAP,
   TYPE,
@@ -197,13 +196,12 @@ class ObiFunction extends Callable {
     this.closure = closure;
   }
   call(interpreter: Interpreter, args: any[]): any {
-    // console.log("called ObiFunction");
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
       environment.define(this.declaration.parameters[i].lexeme, args[i]);
     }
     try {
-      interpreter.executeBlock(this.declaration.body, environment);
+      return interpreter.executeBlock(this.declaration.body, environment);
     } catch (err) {
       // if (err instanceof Return) {
       // return (err as Return).value;
@@ -397,7 +395,7 @@ module runtime {
   }
 }
 
-class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
+class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   globals: Environment = new Environment();
   private environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
@@ -409,7 +407,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   interpret(statements: Stmt[]) {
     try {
       for (const statement of statements) {
-        this.execute(statement);
+        const _ = this.execute(statement);
       }
     } catch (err) {
       if (err instanceof RuntimeError) {
@@ -434,41 +432,43 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   private evaluate(expr: Expr): any {
     return expr.accept(this);
   }
-  private execute(stmt: Stmt) {
-    stmt.accept(this);
+  private execute(stmt: Stmt): any {
+    return stmt.accept(this);
   }
   resolve(exp: Expr, depth: number) {
     this.locals.set(exp, depth);
   }
-  executeBlock(statements: Stmt[], environment: Environment) {
+  executeBlock(statements: Stmt[], environment: Environment): any {
     const previous = this.environment;
+    let returnValue = null;
     try {
       this.environment = environment;
       for (const statement of statements) {
-        this.execute(statement);
+        returnValue = this.execute(statement);
       }
     } finally {
       this.environment = previous;
     }
+    return returnValue;
   }
 
-  visitBlockStmt(stm: stmt.Block) {
-    this.executeBlock(stm.statements, new Environment(this.environment));
+  visitBlockStmt(stm: stmt.Block): any {
+    return this.executeBlock(stm.statements, new Environment(this.environment));
   }
   // visitCaseStmt(stm: stmt.Case) {
   //   const pattern = this.evaluate(stm.pattern);
   //   if (this.isEqual(pattern, ))
   // }
-  visitExpressionStmt(stm: stmt.Expression) {
-    this.evaluate(stm.expression);
+  visitExpressionStmt(stm: stmt.Expression): any {
+    return this.evaluate(stm.expression);
   }
-  visitVarStmt(stm: stmt.Var) {
+  visitVarStmt(stm: stmt.Var): any {
     let value = null;
     if (stm.initializer != null) {
       value = this.evaluate(stm.initializer);
     }
     this.environment.define(stm.name.lexeme, value);
-    return null;
+    return value;
   }
 
   visitAssignExpr(exp: expr.Assign): any {
@@ -581,12 +581,22 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<void> {
   visitMatchExpr(exp: expr.Match): any {
     const against = this.evaluate(exp.against);
 
-    for (const case_ of exp.cases) {
+    for (let i = 0; i < exp.cases.length; i++) {
+      const case_ = exp.cases[i];
       const pattern = this.evaluate(case_.pattern);
       if (this.isEqual(pattern, against)) {
         return this.execute(case_.branch);
       }
     }
+
+    // for (const case_ of exp.cases) {
+    //   const pattern = this.evaluate(case_.pattern);
+    //   console.log("matchvisit", against, pattern, case_.pattern);
+    //   if (this.isEqual(pattern, against)) {
+    //     console.log("branch", case_.branch);
+    //     return this.execute(case_.branch);
+    //   }
+    // }
 
     Obi.errorToken(exp.where, "Un-matched match block.");
     return null;
@@ -922,7 +932,7 @@ class Parser {
   private assignment(): Expr {
     const exp = this.equality();
     // const exp = this.or();
-    if (this.match(TT.COLON_EQUAL)) {
+    if (this.match(TT.EQUAL)) {
       const equals = this.previous();
       const value = this.assignment();
       if (exp instanceof expr.Variable) {
@@ -1075,8 +1085,8 @@ class Parser {
   }
 
   private primary(): Expr {
-    if (this.match(TT.FALSE)) return new expr.Literal(true);
-    if (this.match(TT.TRUE)) return new expr.Literal(false);
+    if (this.match(TT.FALSE)) return new expr.Literal(false);
+    if (this.match(TT.TRUE)) return new expr.Literal(true);
     if (this.match(TT.NIL)) return new expr.Literal(null);
 
     if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
@@ -1150,11 +1160,11 @@ class Parser {
   // }
 
   private pattern(): Expr {
-    if (this.match(TT.NUMBER)) {
+    if (this.match(TT.NUMBER, TT.STRING, TT.FALSE, TT.TRUE, TT.NIL)) {
       return new expr.Literal(this.previous().literal);
     }
 
-    throw this.error(this.peek(), "Expect number in pattern.");
+    throw this.error(this.peek(), "Expect scalar in pattern.");
   }
 
   // private lambda(kind: string): expr.Lambda {
@@ -1229,16 +1239,17 @@ class Parser {
     this.advance();
     while (!this.isAtEnd()) {
       if (this.previous().type == TT.SEMICOLON) return;
-      switch (this.peek().type) {
-        case TT.CLASS:
-        case TT.FUN:
-        case TT.VAR:
-        case TT.FOR:
-        case TT.IF:
-        case TT.WHILE:
-        case TT.RETURN:
-          return;
-      }
+      // No actual statement beginners yet.
+      // switch (this.peek().type) {
+      //   case TT.CLASS:
+      //   // case TT.FUN:
+      //   case TT.VAR:
+      //   case TT.FOR:
+      //   case TT.IF:
+      //   case TT.RETURN:
+      //   // case TT.MATCH:
+      //     return;
+      // }
       this.advance();
     }
   }
@@ -1273,7 +1284,6 @@ class Scanner {
     keywords.set("tap", TT.TAP);
     keywords.set("true", TT.TRUE);
     keywords.set("var", TT.VAR);
-    keywords.set("while", TT.WHILE);
     return keywords;
   }
 
@@ -1618,7 +1628,7 @@ function run(source: string) {
 
   const parser = new Parser(tokens);
   const statements = parser.parse();
-  console.log(statements);
+  // console.log(statements);
 
   if (Obi.hadError) return;
 
@@ -1627,8 +1637,7 @@ function run(source: string) {
 
   if (Obi.hadError) return;
 
-  const result = Obi.interpreter.interpret(statements);
-  console.log(result);
+  Obi.interpreter.interpret(statements);
 }
 
 async function runFile(file: string) {
