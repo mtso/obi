@@ -1,0 +1,4 @@
+match 5 {
+  4 -> print("is 4");
+  _ -> print("reached default");
+};

@@ -32,6 +32,8 @@ enum TokenType {
   RIGHT_PAREN,
   LEFT_BRACE,
   RIGHT_BRACE,
+  LEFT_BRACKET,
+  RIGHT_BRACKET,
   COMMA,
   DOT,
   PLUS,
@@ -363,8 +365,12 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   }
   visitMatchExpr(exp: expr.Match) {
     this.resolveExpr(exp.against);
-    for (const case_ of exp.cases) {
-      this.resolveExpr(case_.pattern);
+    for (let i = 0; i < exp.cases.length; i++) {
+      const case_ = exp.cases[i];
+      if (case_.isDefault && i !== exp.cases.length - 1) {
+        Obi.errorToken(exp.where, "Match branches after default case will never be reached.");
+      }
+      if (null !== case_.pattern) this.resolveExpr(case_.pattern);
       this.resolveStmt(case_.branch);
     }
   }
@@ -584,6 +590,10 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
     for (let i = 0; i < exp.cases.length; i++) {
       const case_ = exp.cases[i];
+      if (case_.isDefault) {
+        return this.execute(case_.branch);
+      }
+      if (!case_.pattern) continue; // obi error
       const pattern = this.evaluate(case_.pattern);
       if (this.isEqual(pattern, against)) {
         return this.execute(case_.branch);
@@ -698,12 +708,14 @@ export class Pattern extends Callable {
 // "Case       = pattern: Expr, branch: Stmt",
 
 export class Case {
-  pattern: Expr;
+  pattern: Expr | null;
   branch: Stmt;
+  isDefault: boolean;
 
-  constructor(pattern: Expr, branch: Stmt) {
+  constructor(pattern: Expr | null, branch: Stmt, isDefault: boolean) {
     this.pattern = pattern;
     this.branch = branch;
+    this.isDefault = isDefault;
   }
 }
 
@@ -1102,6 +1114,28 @@ class Parser {
     return exp;
   }
 
+  table() {
+    const table : { [key: string] : any } = {};
+    let index = 0;
+
+    while (true) {
+      if (this.isAtEnd()) {
+        throw this.error(this.peek(), "Unterminated table");
+      } else if (this.match(TT.RIGHT_BRACKET)) {
+        break;
+      } else {
+        const item = this.expression();
+        table[index] = item;
+        index += 1;
+        if (!this.check(TT.RIGHT_BRACKET)) {
+          this.consume(TT.COMMA, "Expect ',' separating elements in table.");
+        }
+      }
+    }
+
+    return table;
+  }
+
   private primary(): Expr {
     if (this.match(TT.FALSE)) return new expr.Literal(false);
     if (this.match(TT.TRUE)) return new expr.Literal(true);
@@ -1109,6 +1143,8 @@ class Parser {
 
     if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
     if (this.match(TT.STRING)) return new expr.Literal(this.previous().literal);
+
+    if (this.match(TT.LEFT_BRACKET)) return new expr.Literal(this.table());
 
     // if (this.match(TT.SUPER)) {
     //   const keyword = this.previous();
@@ -1163,19 +1199,18 @@ class Parser {
     return new expr.Match(where, against, cases);
   }
 
+  // Parse case statement.
   private case_(): Case {
+    if (this.match(TT.UNDERSCORE)) {
+      this.consume(TT.MINUS_LESS, "Expect '->' after pattern in case.");
+      const branch = this.statement();
+      return new Case(null, branch, true);
+    }
     const pattern = this.expression();
     this.consume(TT.MINUS_LESS, "Expect '->' after pattern in case.");
     const branch = this.statement();
-    return new Case(pattern, branch);
+    return new Case(pattern, branch, false);
   }
-
-  // private caseStatement(): Stmt {
-  //   const pattern = this.expression();
-  //   this.consume(TT.MINUS_LESS, "Expect '->' after pattern in case.");
-  //   const branch = this.statement();
-  //   return new Case(pattern, branch);
-  // }
 
   private pattern(): Expr {
     if (this.match(TT.NUMBER, TT.STRING, TT.FALSE, TT.TRUE, TT.NIL)) {
@@ -1336,6 +1371,14 @@ class Scanner {
         break;
       case "}":
         this.addToken(TT.RIGHT_BRACE);
+        this.column += 1;
+        break;
+      case "[":
+        this.addToken(TT.LEFT_BRACKET);
+        this.column += 1;
+        break;
+      case "]":
+        this.addToken(TT.RIGHT_BRACKET);
         this.column += 1;
         break;
       case ",":
