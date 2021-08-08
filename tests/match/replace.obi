@@ -1,0 +1,31 @@
+fun replaceAll(source, needle, with) {
+  needleLen := strlen(needle);
+  len := strlen(source);
+  start := 0;
+  end := 0;
+  result := "";
+
+  i := 0; while() { i < len - needleLen + 1; } {
+    potential := strslice(source, i, i + needleLen);
+    match (potential == needle) {
+      true -> {
+        result = result + strslice(source, start, end) + with;
+        start = i + needleLen; // skip over found
+        end = start;
+        i = i + needleLen - 1;
+      }
+      false -> end = end + 1;
+    };
+    i = i + 1;
+  };
+
+  return result + strslice(source, start, len);
+}
+
+result := replaceAll("hello world", "hello", "hi");
+print(result);
+// expect: "hi world"
+
+result' := replaceAll("hello world", "ll", "llll");
+print(result');
+// expect: "hellllo world"
