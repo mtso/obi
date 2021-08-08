@@ -1,5 +1,3 @@
-class List {
-  
-}
-
-print(type(List()));
+l := List();
+l.add("1");
+print(l.get(0));

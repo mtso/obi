@@ -9,3 +9,5 @@ language features:
 - ffi
 - comments included as part of ast?
 - ast formatter?
+
+- weirdnesses: resolve inconsistency in `:=` var dec with class property define/assign

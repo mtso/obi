@@ -165,7 +165,6 @@ enum FunctionType {
 }
 
 class ObiFunction extends Callable {
-  // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
   private declaration: expr.Function;
   private closure: Environment;
   isInitializer: boolean;
@@ -548,6 +547,39 @@ module runtime {
     }
   }
 }
+
+const PRELUDE = `class Object {}
+class List {
+  init() {
+    this._items = Object();
+    this.len = 0;
+  }
+  add(item) {
+    this._items.(this.len) = item;
+    this.len = this.len + 1;
+  }
+  get(i) {
+    return this._items.(i);
+  }
+}
+
+fun while(p, f) {
+  match (p()) {
+    true -> {
+      f();
+      while(p, f);
+    }
+    false -> nil;
+  };
+}
+
+fun each(list, fn) {
+  i := 0;
+  while(fun (){ i < list.len; }) {
+    fn(list.get(i));
+    i = i + 1;
+  };
+}`;
 
 class Op {
   func: ObiFunction;
@@ -1849,7 +1881,29 @@ module Obi {
 
 const ENC = new TextEncoder();
 
+function loadPrelude(source: string) {
+  const scanner = new Scanner(source);
+  const tokens = scanner.scanTokens();
+  const parser = new Parser(tokens);
+  const statements = parser.parse();
+
+  if (Obi.hadError) {
+    throw new Error("Failed to load prelude");
+  }
+
+  const resolver = new Resolver(Obi.interpreter);
+  resolver.resolveStmts(statements);
+
+  if (Obi.hadError) {
+    throw new Error("Failed to resolve prelude");
+  }
+
+  Obi.interpreter.interpret(statements);
+}
+
 function run(source: string) {
+  loadPrelude(PRELUDE);
+
   const scanner = new Scanner(source);
   const tokens = scanner.scanTokens();
   const parser = new Parser(tokens);
