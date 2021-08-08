@@ -727,11 +727,96 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         interpreter._islistening = true;
       }
     }
+    class RtStr extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        return Interpreter.stringify(args[0]);
+      }
+    }
+    class RtStrlen extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const str = args[0];
+        if (typeof str !== "string") {
+          throw new RuntimeError({} as Token, "Invalid arg to strlen");
+        }
+        return str.length;
+      }
+    }
+    class RtStrslice extends Callable {
+      arity(): number {
+        return 3;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const str = args[0];
+        const start = args[1];
+        const end = args[2];
+        if (typeof str !== "string") {
+          throw new RuntimeError({} as Token, "Invalid arg to substr");
+        }
+        return str.substring(start, end);
+      }
+    }
+
+    class RtReadfile extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        try {
+          const contents = Deno.readTextFileSync(args[0]);
+          return contents;
+        } catch (err) {
+          throw new RuntimeError(
+            {} as Token,
+            `Failed to read '${args[0]}': ` + err.message,
+          );
+        }
+      }
+    }
+    class RtProcessArgs extends Callable {
+      arity(): number {
+        return 0;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        // Assume the lox.ts script was run like:
+        // deno run --allow-read lox.ts lox.lox -- arg0 arg1 arg2
+        // Skip past lox.lox filename and "--" separator.
+        const runtimeArgs = Deno.args.slice(1);
+        const containerClass = new ObiClass(
+          "RtArgContainer",
+          null,
+          new Map<string, ObiFunction>(),
+        );
+        const container = new ObiInstance(containerClass);
+        for (let i = 0; i < runtimeArgs.length; i++) {
+          container.setDyn(
+            i,
+            runtimeArgs[i],
+            new Token(TT.NUMBER, "" + i, i, 0, 0),
+          );
+        }
+        container.set(
+          new Token(TT.STRING, "count", "count", 0, 0),
+          runtimeArgs.length,
+        );
+        return container;
+      }
+    }
 
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
     this.globals.define("type", new RtType());
+    this.globals.define("str", new RtStr());
+    this.globals.define("strlen", new RtStrlen());
+    this.globals.define("strslice", new RtStrslice());
     this.globals.define("listen_tcp", new RtListenTcp());
+    this.globals.define("readfile", new RtReadfile());
+    this.globals.define("process_args", new RtProcessArgs());
   }
 
   async interpret(statements: Stmt[]) {
@@ -1999,16 +2084,16 @@ async function runFile(file: string) {
 
 {
   const args = Deno.args;
-  if (args.length > 1) {
-    if (args[1] === "--") {
-      await runFile(Deno.args[0]);
-    } else {
-      console.log(`Usage: deno run --allow-read lox.ts [script]`);
-      Deno.exit(64);
+
+  if (args.length >= 1) {
+    const obiFile = args[0] as string;
+    if (!obiFile.endsWith(".obi")) {
+      console.error(`Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`);
+      Deno.exit(65);
     }
-  } else if (args.length == 1) {
-    await runFile(Deno.args[0]);
-    // } else {
-    //   await runPrompt();
+    
+    await runFile(obiFile);
+  } else {
+    console.error(`Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`);
   }
 }

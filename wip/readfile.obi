@@ -1,0 +1,5 @@
+args := process_args();
+filename := args.(0);
+contents := readfile(filename);
+
+print(contents);

@@ -1,0 +1,10 @@
+listen_tcp("0.0.0.0", 8080, fun on_connection(data, write) {
+  print("received connection " + data);
+  contents := readfile("docs/index.html");
+  // escaped := replaceAll(contents, "<", "&lt;");
+  // escaped' := replaceAll(escaped, ">", "&gt;");
+
+  headers := "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: " + str(strlen(contents)) + "\n\n";
+
+  write(headers + contents);
+});

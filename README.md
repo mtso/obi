@@ -1,13 +1,54 @@
-language features:
+# Obi
 
-- string parsing?
-- trailing lambdas / func calls
-- match expressions
-- concurrent/asynchrony syntax
-- error handling
-- module loading
-- ffi
-- comments included as part of ast?
-- ast formatter?
+Obi is an experimental programming language.
 
-- weirdnesses: resolve inconsistency in `:=` var dec with class property define/assign
+Some of the things it currently implements:
+- classes and dynamic property access
+- trailing lambdas
+
+## A Taste of Obi
+
+```
+class Markup {
+    init() {
+        this.buf = "";
+    }
+
+    text(string) {
+        this.buf = this.buf + "<text>" + string + "</text>";
+    }
+
+    body(children) {
+        this.buf = this.buf + "<body>";
+        children();
+        this.buf = this.buf + "</body>";
+    }
+
+    head(children) {
+        this.buf = this.buf + "<head>";
+        children();
+        this.buf = this.buf + "</head>";
+    }
+
+    getMarkup() {
+        return this.buf;
+    }
+}
+
+m := Markup();
+head := m.head;
+body := m.body;
+text := m.text;
+
+head() {
+    body() {
+        text("hi");
+        text("bye");
+    };
+};
+
+print(m.getMarkup());
+// expect: "<head><body><text>hi</text><text>bye</text></body></head>"
+```
+
+See the `tests/` folder for more examples.

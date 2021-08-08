@@ -1,3 +1,19 @@
+language features:
+
+- trailing lambdas / func calls
+- match expressions
+
+- string parsing?
+- concurrent/asynchrony syntax?
+- error handling?
+- module loading?
+- ffi?
+- comments included as part of ast?
+- ast formatter?
+
+- weirdnesses: resolve inconsistency in `:=` var dec with class property define/assign
+
+
 ```
 http := load("http")
 
@@ -154,3 +170,47 @@ fun () { print(a); } ]; }
 foo.printA(); foo.a = 5;
 
 fun makeFoo() { kin Foo { print() { print("a"); } } Foo(); }
+
+
+
+
+
+event loop
+await
+
+
+
+Promise(fun (resolve, reject) {
+  
+}).then(fun(result) {
+  
+});
+
+class RtDelay extends Callable {
+  arity(): number {
+    return 1;
+  }
+
+  call(interpreter: Interpreter, args: any[]): any {
+    const func = args[0] as ObiFunction; // expr.Function;
+    // console.log(func);
+    const by = args[1] as number;
+    // const callee = new ObiFunction(func, interpreter.environment, false);
+
+    const op = new Delayed(func, [], Date.now() + by * 1000);
+    interpreter.queue.push(op);
+    return null;
+  }
+}
+
+
+delay(fun() {
+  
+}, 2);
+
+delay(fun() {
+  print("bye");
+}, 2);
+print("hi");
+sleep(4);
+print("what");

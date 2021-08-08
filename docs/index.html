@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+    html, body {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .content {
+      max-width: 700px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .code {
+      background-color: #F8F2ED;
+      padding: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <!-- <h1>🎀 Obi 🎗</h1> -->
+    <h1>🎗 Obi</h1>
+    <p>Obi is an experimental programming language.</p>
+    <p><a href="https://github.com/mtso/obi">Source</a></p>
+
+    <h2>Examples</h2>
+
+    <h3>List/Each</h3>
+    <pre class="code">
+class List {
+  init() {
+    this._items = Object();
+    this.len = 0;
+  }
+  add(item) {
+    this._items.(this.len) = item;
+    this.len = this.len + 1;
+  }
+  get(i) {
+    return this._items.(i);
+  }
+}
+
+fun while(p, f) {
+  match (p()) {
+    true -> {
+      f();
+      while(p, f);
+    }
+    false -> nil;
+  };
+}
+
+fun each(list, fn) {
+  i := 0;
+  while(fun (){ i < list.len; }) {
+    fn(list.get(i));
+    i = i + 1;
+  };
+}
+
+nums := List()
+nums.add(1);
+nums.add(2);
+nums.add(3);
+each(nums) fun(n) {
+    print(n);
+};
+</pre>
+
+    <h3>DSL</h3>
+    <pre class="code">
+class Markup {
+    init() {
+        this.buf = "";
+    }
+
+    text(string) {
+        this.buf = this.buf + "<text>" + string + "</text>";
+    }
+
+    body(children) {
+        this.buf = this.buf + "<body>";
+        children();
+        this.buf = this.buf + "</body>";
+    }
+
+    head(children) {
+        this.buf = this.buf + "<head>";
+        children();
+        this.buf = this.buf + "</head>";
+    }
+
+    getMarkup() {
+        return this.buf;
+    }
+}
+
+m := Markup();
+head := m.head;
+body := m.body;
+text := m.text;
+
+head() {
+    body() {
+        text("hi");
+        text("bye");
+    };
+};
+
+print(m.getMarkup());
+// expect: "&lt;head>&lt;body>&lt;text>hi&lt;/text>&lt;text>bye&lt;/text>&lt;/body>&lt;/head>"
+</pre>
+  </div>
+</body>
+</html>
