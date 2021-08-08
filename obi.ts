@@ -606,6 +606,7 @@ class Delayed extends Op {
   }
 }
 
+import { delay as DenoDelay } from "https://deno.land/std/async/mod.ts";
 class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   globals: Environment = new Environment();
   environment: Environment = this.globals;
@@ -614,6 +615,9 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   timers: Map<number, Op> = new Map<number, Op>();
 
   queue: Op[] = [];
+
+  // FIXME: this feels wrong.
+  _islistening: boolean = false;
 
   constructor() {
     this.globals.define("print", new runtime.Print());
@@ -666,12 +670,71 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
+    class RtListenTcp extends Callable {
+      arity(): number {
+        return 3;
+      }
+
+      call(interpreter: Interpreter, args: any[]): any {
+        const hostname = args[0] as string;
+        const port = args[1] as number;
+        const handler = args[2] as ObiFunction;
+
+        class R {
+          bytes: Uint8Array;
+          where: number = 0;
+          done: boolean = false;
+          constructor(bytes: Uint8Array) {
+            this.bytes = bytes;
+          }
+          async read(to: Uint8Array): Promise<number | null> {
+            if (this.done) return Promise.resolve(null);
+            const len = to.length;
+            for (let i = 0; i < this.bytes.length && i < len; i++) {
+              to[i] = this.bytes[i];
+            }
+            this.done = true;
+            return Promise.resolve(len);
+          }
+        }
+
+        (async function() {
+          const listener = Deno.listen({ hostname, port });
+          // const op = new Delayed(func, [], Date.now() + by);
+          for await(const conn of listener) {
+            const recv = conn.toString();
+            // console.log("got conn", recv);
+            
+            class Write extends Callable {
+              arity(): number {
+                return 1;
+              }
+
+              call(interpreter: Interpreter, args: any[]): any {
+                const data = args[0] as string;
+                const buf = (new TextEncoder()).encode(data);
+                // const r = new Deno.Reader(buf);
+                Deno.copy(new R(buf), conn);
+              }
+            }
+
+            const op = new Op(handler, [recv, new Write()]);
+            // console.log("pushing op", op);
+            interpreter.queue.push(op);
+          }
+        })();
+
+        interpreter._islistening = true;
+      }
+    }
+
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
     this.globals.define("type", new RtType());
+    this.globals.define("listen_tcp", new RtListenTcp());
   }
 
-  interpret(statements: Stmt[]) {
+  async interpret(statements: Stmt[]) {
     // problem: needs resolution because of function scope.
     // const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
     // this.queue.push(new Op(topLevel, []));
@@ -688,9 +751,16 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
-    while (this.queue.length > 0) {
+    while (this.queue.length > 0 || this._islistening === true) {
       const op = this.queue.shift();
+
+      if (this._islistening && !op) {
+        await DenoDelay(0);
+        continue;
+      };
       if (!op) break;
+
+      // console.log("got op", op);
       if (op.shouldRun()) {
         op.func.call(this, op.args);
       } else if (!op.done && !op.canceled) {

@@ -1,0 +1,6 @@
+listen_tcp("0.0.0.0", 8080, fun on_connection(data, write) {
+  print("received connection");
+  print(data);
+  // write("GET / HTTP/1.1\nHost: localhost:8080\nConnection: close\nContent-Type: text/html\nContent-Length: 11\n\nHello world");
+  write("HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: 11\n\nHello world");
+});
