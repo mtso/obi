@@ -83,19 +83,19 @@ class Markup {
     }
 
     text(string) {
-        this.buf = this.buf + "<text>" + string + "</text>";
+        this.buf = this.buf + "&lt;text>" + string + "&lt;/text>";
     }
 
     body(children) {
-        this.buf = this.buf + "<body>";
+        this.buf = this.buf + "&lt;body>";
         children();
-        this.buf = this.buf + "</body>";
+        this.buf = this.buf + "&lt;/body>";
     }
 
     head(children) {
-        this.buf = this.buf + "<head>";
+        this.buf = this.buf + "&lt;head>";
         children();
-        this.buf = this.buf + "</head>";
+        this.buf = this.buf + "&lt;/head>";
     }
 
     getMarkup() {
