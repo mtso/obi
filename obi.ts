@@ -186,6 +186,7 @@ class ObiFunction extends Callable {
     return new ObiFunction(this.declaration, environment, this.isInitializer);
   }
   call(interpreter: Interpreter, args: any[]): any {
+    // console.log("call", interpreter.environment);
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
       environment.define(this.declaration.parameters[i].lexeme, args[i]);
@@ -551,12 +552,14 @@ module runtime {
 class Op {
   func: ObiFunction;
   args: any[];
+  canceled: boolean = false;
+  done: boolean = false;
   constructor(func: ObiFunction, args: any[]) {
     this.func = func;
     this.args = args;
   }
   shouldRun(): boolean {
-    return true;
+    return !this.done || !this.canceled;
   }
 }
 
@@ -567,7 +570,7 @@ class Delayed extends Op {
     this.at = at;
   }
   shouldRun(): boolean {
-    return Date.now() >= this.at;
+    return super.shouldRun() && (Date.now() >= this.at);
   }
 }
 
@@ -576,13 +579,12 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
 
+  timers: Map<number, Op> = new Map<number, Op>();
+
   queue: Op[] = [];
 
   constructor() {
     this.globals.define("print", new runtime.Print());
-
-    // delay(fun () { print("hi"); }, 5);
-    // print("bye");
 
     class RtDelay extends Callable {
       arity(): number {
@@ -590,37 +592,39 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
 
       call(interpreter: Interpreter, args: any[]): any {
-        const func = args[0] as ObiFunction; // expr.Function;
-        // console.log(func);
-        const by = args[1] as number;
-        // const callee = new ObiFunction(func, interpreter.environment, false);
+        const by = args[0] as number;
+        const func = args[1] as ObiFunction;
 
-        const op = new Delayed(func, [], Date.now() + by * 1000);
+        const op = new Delayed(func, [], Date.now() + by);
+        const id = Math.random();
+        interpreter.timers.set(id, op);
         interpreter.queue.push(op);
-        return null;
+        return id;
+      }
+    }
+
+    class RtClearDelay extends Callable {
+      arity(): number {
+        return 1;
+      }
+
+      call(interpreter: Interpreter, args: any[]): any {
+        const id = args[0] as number;
+        const op = interpreter.timers.get(id);
+        if (op) {
+          op.canceled = true;
+        }
       }
     }
 
     this.globals.define("delay", new RtDelay());
+    this.globals.define("clearDelay", new RtClearDelay());
   }
-  // "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
-
-  interpret2(statements: Stmt[]) {
-    const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
-    this.queue.push(new Op(topLevel, []));
-
-    while (this.queue.length > 0) {
-      const op = this.queue.pop();
-      if (!op) break;
-      if (op.shouldRun()) {
-        op.func.call(this, op.args);
-      } else {
-        this.queue.push(op);
-      }
-    }
-  }
-
   interpret(statements: Stmt[]) {
+    // problem: needs resolution because of function scope.
+    // const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
+    // this.queue.push(new Op(topLevel, []));
+
     try {
       for (const statement of statements) {
         const _ = this.execute(statement);
@@ -632,7 +636,18 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         throw err;
       }
     }
+
+    while (this.queue.length > 0) {
+      const op = this.queue.shift();
+      if (!op) break;
+      if (op.shouldRun()) {
+        op.func.call(this, op.args);
+      } else if (!op.done && !op.canceled) {
+        this.queue.push(op);
+      }
+    }
   }
+
   private evaluate(expr: Expr): any {
     return expr.accept(this);
   }
@@ -1827,7 +1842,7 @@ function run(source: string) {
 
   if (Obi.hadError) return;
 
-  Obi.interpreter.interpret2(statements);
+  Obi.interpreter.interpret(statements);
 }
 
 async function runFile(file: string) {
