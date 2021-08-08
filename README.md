@@ -8,6 +8,18 @@ Some of the things it currently implements:
 - match expressions for control flow
 - classes and dynamic property access
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mtso/obi/main/install.sh | sh
+```
+
+### Usage
+
+```sh
+obi [path to obi file]
+```
+
 ## A Taste of Obi
 
 ```
