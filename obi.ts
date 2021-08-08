@@ -185,13 +185,12 @@ class ObiFunction extends Callable {
     return new ObiFunction(this.declaration, environment, this.isInitializer);
   }
   call(interpreter: Interpreter, args: any[]): any {
-    // console.log("call", interpreter.environment);
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
       environment.define(this.declaration.parameters[i].lexeme, args[i]);
     }
     try {
-      return interpreter.executeBlock(this.declaration.body, environment);
+      return interpreter.executeBlock(this.declaration.body, environment, this);
     } catch (err) {
       if (err instanceof Return) {
         return (err as Return).value;
@@ -565,12 +564,11 @@ class List {
 
 fun while(p, f) {
   match (p()) {
-    true -> {
-      f();
-      while(p, f);
-    }
-    false -> nil;
+    false -> return;
+    _ -> ();
   };
+  f();
+  while(p, f);
 }
 
 fun each(list, fn) {
@@ -666,7 +664,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           return "function";
         } else {
           return (typeof e);
-        } 
+        }
       }
     }
 
@@ -698,13 +696,13 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           }
         }
 
-        (async function() {
+        (async function () {
           const listener = Deno.listen({ hostname, port });
           // const op = new Delayed(func, [], Date.now() + by);
-          for await(const conn of listener) {
+          for await (const conn of listener) {
             const recv = conn.toString();
             // console.log("got conn", recv);
-            
+
             class Write extends Callable {
               arity(): number {
                 return 1;
@@ -842,7 +840,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       if (this._islistening && !op) {
         await DenoDelay(0);
         continue;
-      };
+      }
       if (!op) break;
 
       // console.log("got op", op);
@@ -863,18 +861,57 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   resolve(exp: Expr, depth: number) {
     this.locals.set(exp, depth);
   }
-  executeBlock(statements: Stmt[], environment: Environment): any {
+  executeBlock(
+    statements: Stmt[],
+    environment: Environment,
+    func?: ObiFunction | null,
+  ): any {
     const previous = this.environment;
     let returnValue = null;
     try {
       this.environment = environment;
-      for (const statement of statements) {
-        returnValue = this.execute(statement);
+      if (this.isTailCall(statements, func)) {
+        while (true) {
+          for (const statement of statements.slice(0, statements.length - 1)) {
+            returnValue = this.execute(statement);
+          }
+        }
+      } else {
+        for (const statement of statements) {
+          returnValue = this.execute(statement);
+        }
       }
     } finally {
       this.environment = previous;
     }
     return returnValue;
+  }
+  // Can we make this smarter by inspecting "last statement of all branches in function"?
+  isTailCall(statements: Stmt[], func?: ObiFunction | null) {
+    if (!func) return;
+
+    const lastStmt = statements[statements.length - 1];
+    if (
+      !(lastStmt && lastStmt instanceof stmt.Expression &&
+        (lastStmt as stmt.Expression).expression instanceof expr.Call)
+    ) {
+      return false;
+    }
+
+    const lastCall = (lastStmt as stmt.Expression).expression as expr.Call;
+    if (lastCall.callee instanceof expr.Variable) {
+      const varName = (lastCall.callee as expr.Variable).name;
+      try {
+        const variable = this.lookupVariable(varName, lastCall);
+        if (variable === func) return true;
+      } catch (err) {
+        // Ignore if not found.
+        if (err instanceof RuntimeError) return false;
+        else throw err;
+      }
+    }
+
+    return false;
   }
 
   visitBlockStmt(stm: stmt.Block): any {
@@ -1121,7 +1158,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     return this.lookupVariable(exp.name, exp);
   }
 
-  private lookupVariable(name: Token, exp: Expr): any {
+  lookupVariable(name: Token, exp: Expr): any {
     const distance = this.locals.get(exp);
     if (distance !== null && distance !== undefined) {
       return this.environment.getAt(distance, name.lexeme);
@@ -1545,6 +1582,9 @@ class Parser {
     }
 
     if (this.match(TT.LEFT_PAREN)) {
+      if (this.match(TT.RIGHT_PAREN)) {
+        return new expr.Grouping(new expr.Literal(null)); // do we even need the grouping?
+      }
       const exp = this.expression();
       this.consume(TT.RIGHT_PAREN, "Expect ')' after expression.");
       return new expr.Grouping(exp);
@@ -2088,12 +2128,16 @@ async function runFile(file: string) {
   if (args.length >= 1) {
     const obiFile = args[0] as string;
     if (!obiFile.endsWith(".obi")) {
-      console.error(`Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`);
+      console.error(
+        `Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`,
+      );
       Deno.exit(65);
     }
-    
+
     await runFile(obiFile);
   } else {
-    console.error(`Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`);
+    console.error(
+      `Usage: deno run --allow-all obi.ts [path to obi source] [other args...]`,
+    );
   }
 }
