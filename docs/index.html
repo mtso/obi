@@ -16,53 +16,86 @@
       margin: 0 auto 4em;
       width: 100%;
     }
+    .content_container {
+      /*width: 100%;*/
+      margin: 0.6em;
+    }
 
     .code {
       background-color: #F8F2ED;
       padding: 1em;
+      overflow-x: scroll;
+    }
+
+    .call_to_action_container {
+      display: block;
+      margin-top: 1em;
+      margin-bottom: 2em;
+    }
+    .call_to_action {
+      font-weight: bold;
+      color: #E6B001; /*#D5921A;#E6B001*/
+      text-decoration: none;
+      padding-bottom: 2px;
+      border-bottom: 3px solid #E6B001; /*#D5921A;#E6B001*/
+    }
+    .call_to_action:hover {
+      font-weight: bold;
+      color: #D5921A; /*#D5921A;#E6B001*/
+      text-decoration: none;
+      padding-bottom: 2px;
+      border-bottom: 3px solid #D5921A; /*#D5921A;#E6B001*/
     }
   </style>
 </head>
 <body>
   <div class="content">
+    <div class="content_container">
     <h1>🎗 Obi</h1>
     <p>Obi is an experimental programming language.</p>
-    <p><a href="https://github.com/mtso/obi">Source</a></p>
+    <p>Noteworthy features:
+      <ul>
+        <li>Trailing lambdas</li>
+        <li>Match expressions for control flow</li>
+        <li>Classes and dynamic property access</li>
+      </ul>
+    </p>
+    <div class="call_to_action_container">
+      <a href="https://github.com/mtso/obi" class="call_to_action">Source</a>
+    </div>
 
     <h2>Examples</h2>
 
     <h3>List/Each</h3>
     <pre class="code">
 class List {
-  init() {
-    this._items = Object();
-    this.len = 0;
-  }
-  add(item) {
-    this._items.(this.len) = item;
-    this.len = this.len + 1;
-  }
-  get(i) {
-    return this._items.(i);
-  }
+    init() {
+        this._items = Object();
+        this.len = 0;
+    }
+    add(item) {
+        this._items.(this.len) = item;
+        this.len = this.len + 1;
+    }
+    get(i) {
+        return this._items.(i);
+    }
 }
 
 fun while(p, f) {
-  match (p()) {
-    true -> {
-      f();
-      while(p, f);
-    }
-    false -> nil;
-  };
+    match (p()) {
+        false -> return;
+        _ -> ();
+    };
+    f();
+    while(p, f);
 }
 
 fun each(list, fn) {
-  i := 0;
-  while(fun (){ i < list.len; }) {
-    fn(list.get(i));
-    i = i + 1;
-  };
+    i := 0; while() { i < list.len; } {
+        fn(list.get(i));
+        i = i + 1;
+    };
 }
 
 nums := List()
@@ -120,6 +153,7 @@ head() {
 print(m.getMarkup());
 // expect: "&lt;head>&lt;body>&lt;text>hi&lt;/text>&lt;text>bye&lt;/text>&lt;/body>&lt;/head>"
 </pre>
+  </div>
   </div>
 </body>
 </html>

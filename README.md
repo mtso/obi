@@ -3,8 +3,9 @@
 Obi is an experimental programming language.
 
 Some of the things it currently implements:
-- classes and dynamic property access
 - trailing lambdas
+- match expressions for control flow
+- classes and dynamic property access
 
 ## A Taste of Obi
 
