@@ -1,0 +1,9 @@
+fun meaning() {
+  return 42;
+}
+
+class Life {
+  print() {
+    print("hi life");
+  }
+}

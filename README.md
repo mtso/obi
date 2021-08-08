@@ -1,8 +1,9 @@
-# Obi
+# 🎗 Obi
 
 Obi is an experimental programming language.
 
 Some of the things it currently implements:
+
 - trailing lambdas
 - match expressions for control flow
 - classes and dynamic property access

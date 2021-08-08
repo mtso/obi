@@ -1,4 +1,9 @@
+import { delay as DenoDelay } from "https://deno.land/std@0.103.0/async/mod.ts";
+import * as path from "https://deno.land/std@0.103.0/path/mod.ts";
+
 import { expr, stmt } from "./ast.ts";
+
+let ENTRY_FILE: string = Deno.cwd();
 
 type Expr = expr.Expr;
 type Stmt = stmt.Stmt;
@@ -52,8 +57,10 @@ enum TokenType {
   FOR,
   IF,
   MATCH,
+  MOD,
   NIL,
   OR,
+  PUB,
   RETURN,
   SUPER,
   THIS,
@@ -210,6 +217,9 @@ class ObiFunction extends Callable {
       return `<lambda>`;
     }
   }
+  getDeclaration(): expr.Function {
+    return this.declaration;
+  }
 }
 
 enum ClassType {
@@ -220,17 +230,20 @@ enum ClassType {
 
 class ObiClass extends Callable {
   name: string;
+  where?: Token;
   private methods: Map<string, ObiFunction>;
   private superclass: ObiClass | null;
   constructor(
     name: string,
     superclass: ObiClass | null,
     methods: Map<string, ObiFunction>,
+    where?: Token,
   ) {
     super();
     this.name = name;
     this.superclass = superclass;
     this.methods = methods;
+    this.where = where;
   }
   findMethod(name: string): ObiFunction | null {
     if (this.methods.has(name)) {
@@ -293,6 +306,10 @@ class ObiInstance {
   }
   setDyn(name: any, value: any, where: Token): any {
     this.fields.set(name, value);
+  }
+
+  getFields(): Map<string, any> {
+    return this.fields;
   }
 }
 
@@ -604,7 +621,6 @@ class Delayed extends Op {
   }
 }
 
-import { delay as DenoDelay } from "https://deno.land/std/async/mod.ts";
 class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   globals: Environment = new Environment();
   environment: Environment = this.globals;
@@ -806,6 +822,18 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
+    class RtMod extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const location = path.join(path.dirname(ENTRY_FILE), args[0]);
+        const source = Deno.readTextFileSync(location);
+        const module = loadModule(source);
+        return module;
+      }
+    }
+
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
     this.globals.define("type", new RtType());
@@ -815,6 +843,21 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     this.globals.define("listen_tcp", new RtListenTcp());
     this.globals.define("readfile", new RtReadfile());
     this.globals.define("process_args", new RtProcessArgs());
+    this.globals.define("mod", new RtMod());
+  }
+
+  interpretTopLevel(statements: Stmt[]) {
+    try {
+      for (const statement of statements) {
+        const _ = this.execute(statement);
+      }
+    } catch (err) {
+      if (err instanceof RuntimeError) {
+        Obi.runtimeError(err);
+      } else {
+        throw err;
+      }
+    }
   }
 
   async interpret(statements: Stmt[]) {
@@ -843,7 +886,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
       if (!op) break;
 
-      // console.log("got op", op);
       if (op.shouldRun()) {
         op.func.call(this, op.args);
       } else if (!op.done && !op.canceled) {
@@ -953,6 +995,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       stm.name.lexeme,
       superclass,
       methods,
+      stm.name,
     );
 
     if (null !== superclass) {
@@ -1210,6 +1253,10 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     const longNum = new Float64Array(buffer); // so equivalent to Float64
     longNum[0] = num;
     return Array.from(new Int8Array(buffer)).reverse(); // reverse to get little endian
+  }
+
+  getEnvironment(): Environment {
+    return this.environment;
   }
 }
 
@@ -1723,8 +1770,10 @@ class Scanner {
     keywords.set("fun", TT.FUN);
     keywords.set("if", TT.IF);
     keywords.set("match", TT.MATCH);
+    // keywords.set("mod", TT.MOD);
     keywords.set("nil", TT.NIL);
     keywords.set("or", TT.OR);
+    keywords.set("pub", TT.PUB);
     keywords.set("return", TT.RETURN);
     keywords.set("super", TT.SUPER);
     keywords.set("this", TT.THIS);
@@ -2076,6 +2125,52 @@ module Obi {
 
 const ENC = new TextEncoder();
 
+const MODULE_CLASS = new ObiClass(
+  "Module",
+  null,
+  new Map<string, ObiFunction>(),
+);
+
+function loadModule(source: string) {
+  const module = new ObiInstance(MODULE_CLASS);
+
+  const scanner = new Scanner(source);
+  const tokens = scanner.scanTokens();
+  const parser = new Parser(tokens);
+  const statements = parser.parse();
+  const interpreter = new Interpreter();
+
+  if (Obi.hadError) {
+    throw new Error("Failed to load prelude");
+  }
+
+  const resolver = new Resolver(interpreter);
+  resolver.resolveStmts(statements);
+
+  if (Obi.hadError) {
+    throw new Error("Failed to resolve prelude");
+  }
+
+  interpreter.interpretTopLevel(statements);
+
+  const env = interpreter.getEnvironment();
+
+  env.values.forEach((val, key) => {
+    if (val instanceof ObiFunction) {
+      const fn = val as ObiFunction;
+      const name = fn.getDeclaration().name;
+      if (!name) return;
+      module.setDyn(name.lexeme, fn, name);
+    } else if (val instanceof ObiClass) {
+      const klass = val as ObiClass;
+      if (!klass.where) return;
+      module.setDyn(klass.name, klass, klass.where);
+    }
+  });
+
+  return module;
+}
+
 function loadPrelude(source: string) {
   const scanner = new Scanner(source);
   const tokens = scanner.scanTokens();
@@ -2096,7 +2191,7 @@ function loadPrelude(source: string) {
   Obi.interpreter.interpret(statements);
 }
 
-function run(source: string) {
+async function run(source: string) {
   loadPrelude(PRELUDE);
 
   const scanner = new Scanner(source);
@@ -2106,15 +2201,18 @@ function run(source: string) {
 
   if (Obi.hadError) return;
 
+  // Also resolve async modules?
+  // Also verify modules are at top-level?
   const resolver = new Resolver(Obi.interpreter);
   resolver.resolveStmts(statements);
 
   if (Obi.hadError) return;
 
-  Obi.interpreter.interpret(statements);
+  await Obi.interpreter.interpret(statements);
 }
 
 async function runFile(file: string) {
+  ENTRY_FILE = file;
   const contents = await Deno.readTextFile(file);
   run(contents);
 

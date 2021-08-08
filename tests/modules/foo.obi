@@ -1,0 +1,5 @@
+life := mod("./life.obi");
+
+print(life.meaning()); // expect: "42"
+
+life.Life().print(); // expect: "hi life"

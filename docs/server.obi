@@ -1,3 +1,5 @@
+print("Starting server on port 8080");
+
 listen_tcp("0.0.0.0", 8080, fun on_connection(data, write) {
   print("received connection " + data);
   contents := readfile("docs/index.html");
