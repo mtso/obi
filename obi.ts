@@ -617,9 +617,28 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
+    class RtType extends Callable {
+      arity(): number {
+        return 1;
+      }
+
+      call(interpreter: Interpreter, args: any[]): any {
+        const e = args[0];
+        if (e instanceof ObiInstance) {
+          return e.toString().split(" instance")[0];
+        } else if (e instanceof ObiFunction) {
+          return "function";
+        } else {
+          return (typeof e);
+        } 
+      }
+    }
+
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
+    this.globals.define("type", new RtType());
   }
+
   interpret(statements: Stmt[]) {
     // problem: needs resolution because of function scope.
     // const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
@@ -1468,6 +1487,7 @@ class Scanner {
 
   private static initKeywords(): Map<string, TokenType> {
     const keywords = new Map<string, TokenType>();
+    keywords.set("_", TT.UNDERSCORE);
     keywords.set("and", TT.AND);
     keywords.set("class", TT.CLASS);
     keywords.set("else", TT.ELSE);
@@ -1553,10 +1573,10 @@ class Scanner {
         this.addToken(TT.TILDE);
         this.column += 1;
         break;
-      case "_":
-        this.addToken(TT.UNDERSCORE);
-        this.column += 1;
-        break;
+      // case "_":
+      //   this.addToken(TT.UNDERSCORE);
+      //   this.column += 1;
+      //   break;
       case "-":
         if (this.match(">")) {
           this.addToken(TT.MINUS_LESS);

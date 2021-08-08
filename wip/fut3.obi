@@ -1,0 +1,72 @@
+class Object {}
+class List {
+  init() {
+    this._items = Object();
+    this.len = 0;
+  }
+  add(item) {
+    this._items.(this.len) = item;
+    this.len = this.len + 1;
+  }
+  get(i) {
+    return this._items.(i);
+  }
+}
+
+fun while(p, f) {
+  match (p()) {
+    true -> {
+      f();
+      while(p, f);
+    }
+    false -> nil;
+  };
+}
+
+fun each(list, fn) {
+  i := 0;
+  while(fun (){ i < list.len; }) {
+    fn(list.get(i));
+    i = i + 1;
+  };
+}
+
+class Future {
+  init(fn) {
+    this._state = 0;
+    this._handled = false;
+    this._value = nil;
+    this._deferreds = List();
+    this.doResolve(fn);
+  }
+
+  doResolve(fn) {
+    fn(fun (result) {
+      this._value = result;
+      this._state = 1;
+      this.handle();
+    });
+  }
+
+  then(onResolve) {
+    this._deferreds.add(onResolve);
+    return this;
+  }
+
+  handle() {
+    each(this._deferreds, fun(item) {
+      this._value = item(this._value);
+    });
+  }
+}
+
+Future(fun (resolve) {
+  delay(1000, fun() {
+    resolve("42");
+  });
+}).then(fun (result) {
+  print(result);
+  "52";
+}).then(fun (result) {
+  print(result);
+});
