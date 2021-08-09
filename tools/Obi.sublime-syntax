@@ -1,0 +1,78 @@
+%YAML 1.2
+---
+# WIP, missing variables
+# See http://www.sublimetext.com/docs/3/syntax.html
+name: Obi
+file_extensions:
+  - obi
+scope: source.obi
+contexts:
+  main:
+    # Strings begin and end with quotes, and use backslashes as an escape
+    # character
+    - match: '"'
+      scope: punctuation.definition.string.begin.obi
+      push: double_quoted_string
+
+    # Comments begin with a '//' and finish at the end of the line
+    - match: '//'
+      scope: punctuation.definition.comment.obi
+      push: line_comment
+
+    # Keywords are if, else for and while.
+    # Note that blackslashes don't need to be escaped within single quoted
+    # strings in YAML. When using single quoted strings, only single quotes
+    # need to be escaped: this is done by using two single quotes next to each
+    # other.
+    - match: '\b(match|return)\b'
+      scope: keyword.control.obi
+
+    - match: '\b(and|or)\b'
+      scope: keyword.control.conditional.obi
+
+    - match: '\b(mod)\b'
+      scope: keyword.control.import.obi
+
+    # Numbers
+    - match: '\b(-)?[0-9.]+\b'
+      scope: constant.numeric.obi
+
+    - match: '\btrue\b'
+      scope: constant.language.boolean.true.obi
+
+    - match: '\bfalse\b'
+      scope: constant.language.boolean.false.obi
+
+    - match: '\bnil\b'
+      scope: constant.language.boolean.nil.obi
+
+    - match: '->'
+      scope: keyword.operator.obi
+
+    - match: '<=|==|>=|>|<|\*|\+|\-|\/'
+      scope: keyword.operator.numeric.obi
+
+    - match: ':=|='
+      scope: keyword.operator.assignment.obi
+
+    - match: '\bpub\b'
+      scope: keyword.modifier.obi
+
+    - match: '\bfun\b'
+      scope: support.function.obi
+
+    - match: '\bclass\b'
+      scope: support.class.obi
+
+  double_quoted_string:
+    - meta_scope: string.quoted.double.obi
+    - match: '\\.'
+      scope: constant.character.escape.obi
+    - match: '"'
+      scope: punctuation.definition.string.end.obi
+      pop: true
+
+  line_comment:
+    - meta_scope: comment.line.obi
+    - match: $
+      pop: true
