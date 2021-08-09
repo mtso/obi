@@ -1,0 +1,42 @@
+class Queue {
+    init() {
+        this.items = Object();
+        this.head = 0;
+        this.tail = 0;
+    }
+    empty() {
+        return this.size() <= 0;
+    }
+    size() {
+        return this.tail - this.head;
+    }
+    add(item) {
+        this.items.(this.tail) = item;
+        this.tail = this.tail + 1;
+    }
+    poll() {
+        match (this.empty()) {
+            true -> return nil;
+            _ -> ();
+        };
+        item := this.items.(this.head);
+        this.head = this.head + 1;
+        return item;
+    }
+    peek() {
+        match (this.empty()) {
+            true -> return nil;
+            _ -> ();
+        };
+        return this.items.(this.head);
+    }
+}
+
+q := Queue();
+q.add(1);
+q.add(2);
+print(q.size()); // expect: "2"
+print(q.poll()); // expect: "1"
+print(q.peek()); // expect: "2"
+print(q.poll()); // expect: "2"
+print(q.poll()); // expect: "nil"

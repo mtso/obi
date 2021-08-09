@@ -565,35 +565,39 @@ module runtime {
 }
 
 const PRELUDE = `class Object {}
+
 class List {
-  init() {
-    this._items = Object();
-    this.len = 0;
-  }
-  add(item) {
-    this._items.(this.len) = item;
-    this.len = this.len + 1;
-  }
-  get(i) {
-    return this._items.(i);
-  }
+    init() {
+        this._items = Object();
+        this.len = 0;
+    }
+    add(item) {
+        this._items.(this.len) = item;
+        this.len = this.len + 1;
+    }
+    get(i) {
+        return this._items.(i);
+    }
+    size() {
+        return this.len;
+    }
 }
 
 fun while(p, f) {
-  match (p()) {
-    false -> return;
-    _ -> ();
-  };
-  f();
-  while(p, f);
+    match (p()) {
+        false -> return;
+        _ -> ();
+    };
+    f();
+    while(p, f);
 }
 
 fun each(list, fn) {
-  i := 0;
-  while(fun (){ i < list.len; }) {
-    fn(list.get(i));
-    i = i + 1;
-  };
+    i := 0;
+    while(fun (){ i < list.len; }) {
+        fn(list.get(i));
+        i = i + 1;
+    };
 }`;
 
 class Op {
@@ -635,6 +639,12 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
   constructor() {
     this.globals.define("print", new runtime.Print());
+
+    const obiArrayClass = new ObiClass(
+      "ObiArray",
+      null,
+      new Map<string, ObiFunction>(),
+    );
 
     class RtDelay extends Callable {
       arity(): number {
@@ -681,6 +691,28 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         } else {
           return (typeof e);
         }
+      }
+    }
+
+    class RtKeys extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const o = args[0] as ObiInstance;
+        const fields = o.getFields();
+        const array = new ObiInstance(obiArrayClass);
+        let i = 0;
+        for (const key of fields.keys()) {
+          array.setDyn(
+            i,
+            key,
+            new Token(TT.NUMBER, JSON.stringify(i), i, 0, 0),
+          );
+          i += 1;
+        }
+        array.setDyn("len", i, new Token(TT.IDENTIFIER, "len", null, 0, 0));
+        return array;
       }
     }
 
@@ -837,6 +869,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
     this.globals.define("type", new RtType());
+    this.globals.define("keys", new RtKeys());
     this.globals.define("str", new RtStr());
     this.globals.define("strlen", new RtStrlen());
     this.globals.define("strslice", new RtStrslice());

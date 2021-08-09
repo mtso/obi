@@ -1,41 +1,41 @@
 class Object {}
 class List {
-  init() {
-    this._items = Object();
-    this.len = 0;
-  }
-  add(item) {
-    this._items.(this.len) = item;
-    this.len = this.len + 1;
-  }
-  get(i) {
-    return this._items.(i);
-  }
+    init() {
+        this._items = Object();
+        this.len = 0;
+    }
+    add(item) {
+        this._items.(this.len) = item;
+        this.len = this.len + 1;
+    }
+    get(i) {
+        return this._items.(i);
+    }
 }
 
 fun while(p, f) {
-  match (p()) {
-    true -> {
-      f();
-      while(p, f);
-    }
-    false -> nil;
-  };
+    match (p()) {
+        true -> {
+            f();
+            while(p, f);
+        }
+        false -> nil;
+    };
 }
 
 fun each(list, fn) {
-  i := 0;
-  while(fun (){ i < list.len; }) {
-    fn(list.get(i));
-    i = i + 1;
-  };
+    i := 0;
+    while(fun (){ i < list.len; }) {
+        fn(list.get(i));
+        i = i + 1;
+    };
 }
 
 l := List();
 l.add(1);
 l.add(2);
-each(l, fun(i) {
-  print(i);
-});
+each(l) fun(i) {
+    print(i);
+};
 // expect: "1"
 // expect: "2"

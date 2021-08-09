@@ -1,0 +1,188 @@
+class Queue {
+    init() {
+        this.items = Object();
+        this.head = 0;
+        this.tail = 0;
+    }
+    empty() {
+        return this.size() <= 0;
+    }
+    size() {
+        return this.tail - this.head;
+    }
+    add(item) {
+        this.items.(this.tail) = item;
+        this.tail = this.tail + 1;
+    }
+    poll() {
+        match (this.empty()) {
+            true -> return nil;
+            _ -> ();
+        };
+        item := this.items.(this.head);
+        this.head = this.head + 1;
+        return item;
+    }
+    peek() {
+        match (this.empty()) {
+            true -> return nil;
+            _ -> ();
+        };
+        return this.items.(this.head);
+    }
+}
+
+class Map {
+    init() {
+        this.items = Object();
+        this.defined = Object();
+    }
+    get(key) {
+        return match (this.defined.(key)) {
+            true -> this.items.(key);
+            _ -> nil;
+        };
+    }
+    set(key, value) {
+        this.items.(key) = value;
+        this.defined.(key) = true;
+    }
+    has(key) {
+        return match (this.defined.(key)) {
+            true -> true;
+            _ -> false;
+        };
+    }
+    unset(key) {
+        this.items.(key) = nil;
+        this.defined.(key) = false;
+    }
+    keys() {
+        result := Object();
+        itemKeys := keys(this.items);
+        resultLen := 0;
+        i := 0; while() { i < itemKeys.len; } {
+            match (this.defined.(itemKeys.(i))) {
+                true -> {
+                    result.(resultLen) = itemKeys.(i);
+                    resultLen = resultLen + 1;
+                }
+                _ -> ();
+            };
+            i = i + 1;
+        };
+        result.("len") = resultLen;
+        return result;
+    }
+}
+
+fun reverseList(list) {
+    reversed := List();
+    i := list.size() - 1; while() { i >= 0; } {
+        reversed.add(list.get(i));
+        i = i - 1;
+    };
+    return reversed;
+}
+
+fun findLadder(start, end, words) {
+    fun makeAdjacents(words) {
+        map := Map();
+
+        each(words) fun(word) {
+            i := 0; while() { i < strlen(word); } {
+                node := strslice(word, 0, i) + "*" + strslice(word, i + 1, strlen(word));
+
+                list := match(map.has(node)) {
+                    false -> {
+                        newList := List();
+                        map.set(node, newList);
+                        newList;
+                    }
+                    true -> map.get(node);
+                };
+
+                list.add(word);
+                i = i + 1;
+            };
+        };
+
+        return map;
+    }
+
+    fun backtrack(start, end, visited) {
+        curr := end;
+        path := List();
+        path.add(curr);
+        while() { curr != start; } {
+            before := visited.get(curr);
+            path.add(before);
+            curr = before;
+        };
+        return path;
+    }
+    
+    neighbors := makeAdjacents(words);
+    queue := Queue();
+    queue.add(start);
+    visited := Map();
+    found := false;
+
+    while() { !queue.empty(); } {
+        word := queue.poll();
+
+        match (word == end) {
+            true -> {
+                found = true;
+                return;
+            }
+            false -> ();
+        };
+
+        i := 0; while() { i < strlen(word); } {
+            node := strslice(word, 0, i) + "*" + strslice(word, i + 1, strlen(word));
+            adjacents := neighbors.get(node);
+
+            each(adjacents) fun(adjacent) {
+                match (visited.has(adjacent)) {
+                    true -> return;
+                    false -> ();
+                };
+
+                visited.set(adjacent, word);
+                queue.add(adjacent);
+            };
+
+            i = i + 1;
+        };
+    };
+
+    match found {
+        true -> return reverseList(backtrack(start, end, visited));
+        false -> return nil;
+    };
+}
+
+{
+    start := "LEAD";
+    end := "GOLD";
+    words := List();
+    words.add("LEAD");
+    words.add("LAND");
+    words.add("LEND");
+    words.add("LEER");
+    words.add("DEAD");
+    words.add("GOLD");
+    words.add("LOAD");
+    words.add("GOAD");
+    words.add("GOOD");
+
+    path := findLadder(start, end, words);
+    each(path) fun(segment) {
+        print(segment);
+    };
+    // expect: "LEAD"
+    // expect: "LOAD"
+    // expect: "GOAD"
+    // expect: "GOLD"
+}

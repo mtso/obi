@@ -1,0 +1,20 @@
+fun range(max, f) {
+    fun range'(i) {
+        match i < max {
+            false -> return;
+            _ -> ();
+        };
+        f(i);
+        range'(i + 1);
+    }
+    range'(0);
+}
+
+range(5) fun(i) {
+    print(i);
+};
+// expect: "0"
+// expect: "1"
+// expect: "2"
+// expect: "3"
+// expect: "4"
