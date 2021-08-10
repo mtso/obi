@@ -1,12 +1,72 @@
 print("Starting server on port 8080");
 
-listen_tcp("0.0.0.0", 8080, fun on_connection(data, write) {
-  print("received connection " + data);
-  contents := readfile("docs/index.html");
-  // escaped := replaceAll(contents, "<", "&lt;");
-  // escaped' := replaceAll(escaped, ">", "&gt;");
+class HttpRequest {
+    init(method, path) {
+        this.method = method;
+        this.path = path;
+    }
+}
 
-  headers := "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: " + str(strlen(contents)) + "\n\n";
+fun split(source, needle) {
+  needleLen := strlen(needle);
+  len := strlen(source);
+  start := 0;
+  end := 0;
+  pieces := Object();
+  pieceIdx := 0;
 
-  write(headers + contents);
-});
+  i := 0; while() { i < len - needleLen + 1; } {
+    potential := strslice(source, i, i + needleLen);
+    match (potential == needle) {
+      true -> {
+        pieces.(pieceIdx) = strslice(source, start, end);
+        pieceIdx = pieceIdx + 1;
+        start = i + needleLen; // skip over found
+        end = start;
+        i = i + needleLen - 1;
+      }
+      false -> end = end + 1;
+    };
+    i = i + 1;
+  };
+
+  pieces.(pieceIdx) = strslice(source, start, len);
+  pieces.("len") = pieceIdx;
+  return pieces;
+}
+
+fun parse_http(data) {
+    lines := split(data, "\n");
+    line0 := lines.(0);
+    headers := split(line0, " ");
+    method := headers.(0);
+    path := headers.(1);
+    return HttpRequest(method, path);
+}
+
+listen_tcp("0.0.0.0", 8080) fun (connection) {
+    connection.on_data() fun (data) {
+        info := parse_http(data);
+        print(info.method + " " + info.path);
+
+        match info.path {
+            "/" -> {
+                contents := readfile("docs/index.html");
+                headers := "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: " + str(strlen(contents)) + "\n\n";
+                connection.write(headers + contents);
+            }
+            "/index.html" -> {
+                contents := readfile("docs/index.html");
+                headers := "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: " + str(strlen(contents)) + "\n\n";
+                connection.write(headers + contents);
+            }
+            "/favicon.ico" -> {
+                contents := readfile_bytes("docs/favicon.ico");
+                headers := "HTTP/1.1 200 OK\nContent-Type: image/x-icon\nContent-Length: " + str(contents.len) + "\n\n";
+                connection.write_bytes(bytes_concat(text_encode(headers), contents));
+            }
+        };
+
+        connection.close();
+    };
+};

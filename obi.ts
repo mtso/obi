@@ -3,6 +3,27 @@ import * as path from "https://deno.land/std@0.103.0/path/mod.ts";
 
 import { expr, stmt } from "./ast.ts";
 
+class WaitGroup {
+  count: number = 0;
+  doneCount: number = 0;
+
+  add(n: number) {
+    this.count += n;
+  }
+  done() {
+    this.doneCount += 1;
+  }
+  async wait(): Promise<void> {
+    const self = this;
+    return new Promise((resolve) => {
+      (function wait_() {
+        if (self.doneCount >= self.count) resolve();
+        else setTimeout(wait_, 0);
+      })();
+    });
+  }
+}
+
 let ENTRY_FILE: string = Deno.cwd();
 
 type Expr = expr.Expr;
@@ -600,28 +621,34 @@ fun each(list, fn) {
     };
 }`;
 
-class Op {
-  func: ObiFunction;
-  args: any[];
-  canceled: boolean = false;
-  done: boolean = false;
-  constructor(func: ObiFunction, args: any[]) {
-    this.func = func;
-    this.args = args;
+class Bytes extends ObiInstance {
+  bytes: Uint8Array;
+  constructor(bytes: Uint8Array) {
+    super(new ObiClass("Bytes", null, new Map<string, ObiFunction>()));
+    this.bytes = bytes;
   }
-  shouldRun(): boolean {
-    return !this.done || !this.canceled;
+  getDyn(name: any, where: Token): any {
+    if (typeof name === "number") {
+      return this.bytes[name] || null;
+    }
+    if (name === "len") {
+      return this.bytes.length;
+    }
+    return super.getDyn(name, where);
   }
-}
+  setDyn(name: any, value: any, where: Token): any {
+    if (typeof name === "number" && typeof value === "number") {
+      this.bytes[name] = value;
+      return;
+    }
+    return super.setDyn(name, value, where);
+  }
 
-class Delayed extends Op {
-  at: number;
-  constructor(func: ObiFunction, args: any[], at: number) {
-    super(func, args);
-    this.at = at;
-  }
-  shouldRun(): boolean {
-    return super.shouldRun() && (Date.now() >= this.at);
+  get(name: Token): any {
+    if (name.lexeme === "len") {
+      return this.bytes.length;
+    }
+    return super.get(name);
   }
 }
 
@@ -630,12 +657,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
 
-  timers: Map<number, Op> = new Map<number, Op>();
-
-  queue: Op[] = [];
-
-  // FIXME: this feels wrong.
-  _islistening: boolean = false;
+  waitGroup: WaitGroup = new WaitGroup();
+  timers: Map<number, number> = new Map<number, number>();
 
   constructor() {
     this.globals.define("print", new runtime.Print());
@@ -655,10 +678,13 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         const by = args[0] as number;
         const func = args[1] as ObiFunction;
 
-        const op = new Delayed(func, [], Date.now() + by);
         const id = Math.random();
-        interpreter.timers.set(id, op);
-        interpreter.queue.push(op);
+        interpreter.waitGroup.add(1);
+        const timer = setTimeout(() => {
+          func.call(interpreter, []);
+          interpreter.waitGroup.done();
+        }, by);
+        interpreter.timers.set(id, timer);
         return id;
       }
     }
@@ -670,10 +696,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
       call(interpreter: Interpreter, args: any[]): any {
         const id = args[0] as number;
-        const op = interpreter.timers.get(id);
-        if (op) {
-          op.canceled = true;
-        }
+        const timer = interpreter.timers.get(id);
+        clearTimeout(timer);
       }
     }
 
@@ -726,6 +750,19 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         const port = args[1] as number;
         const handler = args[2] as ObiFunction;
 
+        async function readAll(reader: Deno.Reader) {
+          const buf = new Uint8Array(4096);
+          let data = "";
+          let len = 4096;
+          while (len >= 4096) {
+            const read = await reader.read(buf);
+            if (!read) break;
+            len = read;
+            data += (new TextDecoder()).decode(buf.slice(0, len));
+          }
+          return data;
+        }
+
         class R {
           bytes: Uint8Array;
           where: number = 0;
@@ -744,33 +781,109 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           }
         }
 
+        interpreter.waitGroup.add(1);
+
         (async function () {
           const listener = Deno.listen({ hostname, port });
-          // const op = new Delayed(func, [], Date.now() + by);
+
+          const connectionClass = new ObiClass(
+            "Connection",
+            null,
+            new Map<string, ObiFunction>(),
+          );
+
           for await (const conn of listener) {
-            const recv = conn.toString();
-            // console.log("got conn", recv);
+            let closed = false;
 
             class Write extends Callable {
               arity(): number {
                 return 1;
               }
-
               call(interpreter: Interpreter, args: any[]): any {
-                const data = args[0] as string;
+                if (closed) return;
+                const data = args[0];
                 const buf = (new TextEncoder()).encode(data);
-                // const r = new Deno.Reader(buf);
-                Deno.copy(new R(buf), conn);
+                try {
+                  Deno.copy(new R(buf), conn);
+                } catch (err) {
+                  console.log(err);
+                }
+              }
+            }
+            class WriteBytes extends Callable {
+              arity(): number {
+                return 1;
+              }
+              call(interpreter: Interpreter, args: any[]): any {
+                if (closed) return;
+                const data = args[0] as Bytes;
+                try {
+                  conn.write(data.bytes);
+                } catch (err) {
+                  console.log(err);
+                }
               }
             }
 
-            const op = new Op(handler, [recv, new Write()]);
-            // console.log("pushing op", op);
-            interpreter.queue.push(op);
-          }
-        })();
+            class OnData extends Callable {
+              arity(): number {
+                return 1;
+              }
 
-        interpreter._islistening = true;
+              call(interpreter: Interpreter, args: any[]): any {
+                const receiver = args[0];
+
+                (async function getData() {
+                  if (closed) return;
+                  try {
+                    const chunk = await readAll(conn);
+                    receiver.call(interpreter, [chunk]);
+                  } catch (err) {
+                    if (err.name === "Interrupted") {
+                      if (!closed) closed = true;
+                    } else {
+                      console.error("Unhandled read error", err);
+                    }
+                  }
+                })();
+              }
+            }
+
+            class Close extends Callable {
+              arity(): number {
+                return 0;
+              }
+
+              call(interpreter: Interpreter, args: any[]): any {
+                if (closed) return;
+                closed = true;
+                setTimeout(() => conn.close(), 0);
+              }
+            }
+
+            const connectionInstance = new ObiInstance(connectionClass);
+            connectionInstance.set(
+              new Token(TT.IDENTIFIER, "write", null, 0, 0),
+              new Write(),
+            );
+            connectionInstance.set(
+              new Token(TT.IDENTIFIER, "on_data", null, 0, 0),
+              new OnData(),
+            );
+            connectionInstance.set(
+              new Token(TT.IDENTIFIER, "close", null, 0, 0),
+              new Close(),
+            );
+            connectionInstance.set(
+              new Token(TT.IDENTIFIER, "write_bytes", null, 0, 0),
+              new WriteBytes(),
+            );
+
+            handler.call(interpreter, [connectionInstance]);
+          }
+
+          interpreter.waitGroup.done();
+        })();
       }
     }
     class RtStr extends Callable {
@@ -791,6 +904,21 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           throw new RuntimeError({} as Token, "Invalid arg to strlen");
         }
         return str.length;
+      }
+    }
+    class RtLen extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const thing = args[0];
+        if (args[0] instanceof Bytes) {
+          return (args[0] as Bytes).bytes.length;
+        }
+        if ("length" in thing) {
+          return thing.length;
+        }
+        throw new RuntimeError({} as Token, "Invalid arg to len");
       }
     }
     class RtStrslice extends Callable {
@@ -824,14 +952,27 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         }
       }
     }
+    class RtReadfileBytes extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        try {
+          const contents = Deno.readFileSync(args[0]);
+          return new Bytes(contents);
+        } catch (err) {
+          throw new RuntimeError(
+            {} as Token,
+            `Failed to read '${args[0]}': ` + err.message,
+          );
+        }
+      }
+    }
     class RtProcessArgs extends Callable {
       arity(): number {
         return 0;
       }
       call(interpreter: Interpreter, args: any[]): any {
-        // Assume the lox.ts script was run like:
-        // deno run --allow-read lox.ts lox.lox -- arg0 arg1 arg2
-        // Skip past lox.lox filename and "--" separator.
         const runtimeArgs = Deno.args.slice(1);
         const containerClass = new ObiClass(
           "RtArgContainer",
@@ -866,6 +1007,48 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
+    class RtClock extends Callable {
+      arity(): number {
+        return 0;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        return Date.now();
+      }
+    }
+    class RtTextEncode extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const bytes = (new TextEncoder()).encode(args[0]);
+        return new Bytes(bytes);
+      }
+    }
+    class RtBytesConcat extends Callable {
+      arity(): number {
+        return 2;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const a = args[0];
+        const b = args[1];
+        if (!(a instanceof Bytes && b instanceof Bytes)) {
+          throw new RuntimeError(
+            new Token(TT.IDENTIFIER, "bytes_concat", null, 0, 0),
+            "Expect both arguments to be Bytes",
+          );
+        }
+        const result = new Uint8Array(a.bytes.length + b.bytes.length);
+        for (let i = 0; i < a.bytes.length; i++) {
+          result[i] = a.bytes[i];
+        }
+        for (let j = 0; j < b.bytes.length; j++) {
+          result[a.bytes.length + j] = b.bytes[j];
+        }
+        return new Bytes(result);
+      }
+    }
+
+    this.globals.define("clock", new RtClock());
     this.globals.define("delay", new RtDelay());
     this.globals.define("clearDelay", new RtClearDelay());
     this.globals.define("type", new RtType());
@@ -875,7 +1058,11 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     this.globals.define("strslice", new RtStrslice());
     this.globals.define("listen_tcp", new RtListenTcp());
     this.globals.define("readfile", new RtReadfile());
+    this.globals.define("readfile_bytes", new RtReadfileBytes());
+    this.globals.define("bytes_concat", new RtBytesConcat());
     this.globals.define("process_args", new RtProcessArgs());
+    this.globals.define("text_encode", new RtTextEncode());
+    this.globals.define("len", new RtLen());
     this.globals.define("mod", new RtMod());
   }
 
@@ -894,10 +1081,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   }
 
   async interpret(statements: Stmt[]) {
-    // problem: needs resolution because of function scope.
-    // const topLevel = new ObiFunction(new expr.Function(null, [], statements), this.environment, false);
-    // this.queue.push(new Op(topLevel, []));
-
     try {
       for (const statement of statements) {
         const _ = this.execute(statement);
@@ -910,21 +1093,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       }
     }
 
-    while (this.queue.length > 0 || this._islistening === true) {
-      const op = this.queue.shift();
-
-      if (this._islistening && !op) {
-        await DenoDelay(0);
-        continue;
-      }
-      if (!op) break;
-
-      if (op.shouldRun()) {
-        op.func.call(this, op.args);
-      } else if (!op.done && !op.canceled) {
-        this.queue.push(op);
-      }
-    }
+    await DenoDelay(0);
+    await this.waitGroup.wait();
   }
 
   private evaluate(expr: Expr): any {
