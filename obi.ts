@@ -604,6 +604,50 @@ class List {
     }
 }
 
+class Map {
+    init() {
+        this.items = Object();
+        this.defined = Object();
+    }
+    get(key) {
+        return match (this.defined.(key)) {
+            true -> this.items.(key);
+            _ -> nil;
+        };
+    }
+    set(key, value) {
+        this.items.(key) = value;
+        this.defined.(key) = true;
+    }
+    has(key) {
+        return match (this.defined.(key)) {
+            true -> true;
+            _ -> false;
+        };
+    }
+    unset(key) {
+        this.items.(key) = nil;
+        this.defined.(key) = false;
+    }
+    keys() {
+        result := Object();
+        itemKeys := keys(this.items);
+        resultLen := 0;
+        i := 0; while() { i < itemKeys.len; } {
+            match (this.defined.(itemKeys.(i))) {
+                true -> {
+                    result.(resultLen) = itemKeys.(i);
+                    resultLen = resultLen + 1;
+                }
+                _ -> ();
+            };
+            i = i + 1;
+        };
+        result.("len") = resultLen;
+        return result;
+    }
+}
+
 fun while(p, f) {
     match (p()) {
         false -> return;
@@ -762,6 +806,31 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           }
           return data;
         }
+        async function readAllBytes(reader: Deno.Reader) {
+          const buf = new Uint8Array(4096);
+          let data = "";
+          const CHUNK_SIZE = 4096;
+          let len = CHUNK_SIZE;
+          const chunks = [];
+          while (len >= CHUNK_SIZE) {
+            const read = await reader.read(buf);
+            if (!read) break;
+            len = read;
+            chunks.push(buf.slice(0, len));
+          }
+          if (chunks.length < 1) {
+            return new Uint8Array(0);
+          }
+          const totalSize = (chunks.length - 1) * CHUNK_SIZE +
+            (chunks[chunks.length - 1].length);
+          const result = new Uint8Array(totalSize);
+          for (let i = 0; i < chunks.length; i++) {
+            for (let j = 0; j < chunks[i].length; j++) {
+              result[i * CHUNK_SIZE + j] = chunks[i][j];
+            }
+          }
+          return result;
+        }
 
         class R {
           bytes: Uint8Array;
@@ -795,7 +864,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           for await (const conn of listener) {
             let closed = false;
 
-            class Write extends Callable {
+            class WriteString extends Callable {
               arity(): number {
                 return 1;
               }
@@ -810,7 +879,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
                 }
               }
             }
-            class WriteBytes extends Callable {
+            class Write extends Callable {
               arity(): number {
                 return 1;
               }
@@ -836,8 +905,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
                 (async function getData() {
                   if (closed) return;
                   try {
-                    const chunk = await readAll(conn);
-                    receiver.call(interpreter, [chunk]);
+                    const bytes = await readAllBytes(conn);
+                    receiver.call(interpreter, [new Bytes(bytes)]);
                   } catch (err) {
                     if (err.name === "Interrupted") {
                       if (!closed) closed = true;
@@ -863,8 +932,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
             const connectionInstance = new ObiInstance(connectionClass);
             connectionInstance.set(
-              new Token(TT.IDENTIFIER, "write", null, 0, 0),
-              new Write(),
+              new Token(TT.IDENTIFIER, "write_string", null, 0, 0),
+              new WriteString(),
             );
             connectionInstance.set(
               new Token(TT.IDENTIFIER, "on_data", null, 0, 0),
@@ -875,8 +944,8 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
               new Close(),
             );
             connectionInstance.set(
-              new Token(TT.IDENTIFIER, "write_bytes", null, 0, 0),
-              new WriteBytes(),
+              new Token(TT.IDENTIFIER, "write", null, 0, 0),
+              new Write(),
             );
 
             handler.call(interpreter, [connectionInstance]);
@@ -945,6 +1014,9 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           const contents = Deno.readTextFileSync(args[0]);
           return contents;
         } catch (err) {
+          if (err.name === "NotFound") {
+            return null;
+          }
           throw new RuntimeError(
             {} as Token,
             `Failed to read '${args[0]}': ` + err.message,
@@ -961,6 +1033,9 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
           const contents = Deno.readFileSync(args[0]);
           return new Bytes(contents);
         } catch (err) {
+          if (err.name === "NotFound") {
+            return null;
+          }
           throw new RuntimeError(
             {} as Token,
             `Failed to read '${args[0]}': ` + err.message,
@@ -1024,6 +1099,20 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         return new Bytes(bytes);
       }
     }
+    class RtTextDecode extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        if (!(args[0] instanceof Bytes)) {
+          throw new RuntimeError(
+            {} as Token,
+            `text_decode called on "${typeof args[0]}"`,
+          );
+        }
+        return (new TextDecoder()).decode(args[0].bytes);
+      }
+    }
     class RtBytesConcat extends Callable {
       arity(): number {
         return 2;
@@ -1047,6 +1136,16 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         return new Bytes(result);
       }
     }
+    class RtParseFloat extends Callable {
+      arity(): number {
+        return 1;
+      }
+      call(interpreter: Interpreter, args: any[]): any {
+        const v = Number.parseFloat(args[0]);
+        if (isNaN(v)) return null;
+        return v;
+      }
+    }
 
     this.globals.define("clock", new RtClock());
     this.globals.define("delay", new RtDelay());
@@ -1056,12 +1155,14 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     this.globals.define("str", new RtStr());
     this.globals.define("strlen", new RtStrlen());
     this.globals.define("strslice", new RtStrslice());
+    this.globals.define("parse_float", new RtParseFloat());
     this.globals.define("listen_tcp", new RtListenTcp());
     this.globals.define("readfile", new RtReadfile());
     this.globals.define("readfile_bytes", new RtReadfileBytes());
     this.globals.define("bytes_concat", new RtBytesConcat());
     this.globals.define("process_args", new RtProcessArgs());
     this.globals.define("text_encode", new RtTextEncode());
+    this.globals.define("text_decode", new RtTextDecode());
     this.globals.define("len", new RtLen());
     this.globals.define("mod", new RtMod());
   }

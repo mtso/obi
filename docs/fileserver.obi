@@ -1,0 +1,161 @@
+class HttpRequest {
+    init(method, path) {
+        this.method = method;
+        this.path = path;
+    }
+}
+
+fun replaceAll(source, needle, with) {
+    needleLen := strlen(needle);
+    len := strlen(source);
+    start := 0;
+    end := 0;
+    result := "";
+
+    i := 0; while() { i < len - needleLen + 1; } {
+        potential := strslice(source, i, i + needleLen);
+        match (potential == needle) {
+            true -> {
+                result = result + strslice(source, start, end) + with;
+                start = i + needleLen; // skip over found
+                end = start;
+                i = i + needleLen - 1;
+            }
+            false -> end = end + 1;
+        };
+        i = i + 1;
+    };
+
+    return result + strslice(source, start, len);
+}
+
+fun split(source, needle) {
+    needleLen := strlen(needle);
+    len := strlen(source);
+    start := 0;
+    end := 0;
+    pieces := Object();
+    pieceIdx := 0;
+
+    i := 0; while() { i < len - needleLen + 1; } {
+        potential := strslice(source, i, i + needleLen);
+        match (potential == needle) {
+            true -> {
+                pieces.(pieceIdx) = strslice(source, start, end);
+                pieceIdx = pieceIdx + 1;
+                start = i + needleLen; // skip over found
+                end = start;
+                i = i + needleLen - 1;
+            }
+            false -> end = end + 1;
+        };
+        i = i + 1;
+    };
+
+    pieces.(pieceIdx) = strslice(source, start, len);
+    pieces.("len") = pieceIdx;
+    return pieces;
+}
+
+fun fileExt(string) {
+    ext := nil;
+    i := strlen(string); while() { i > 0 and ext == nil; } {
+        match strslice(string, i - 1, i) == "." {
+            true -> ext = strslice(string, i - 1, strlen(string));
+            _ -> ();
+        };
+        i = i - 1;
+    };
+    return ext;
+}
+
+fun first(hay, needle) {
+    idx := nil;
+    i := 0; while() { i < strlen(hay) and idx == nil; } {
+        match strslice(hay, i, i + 1) == needle {
+            true -> idx = i;
+            _ -> ();
+        };
+        i = i + 1;
+    };
+    return idx;
+}
+
+fun parse_http(data) {
+    lines := split(data, "\n");
+    line0 := lines.(0);
+    meta := split(line0, " ");
+    method := meta.(0);
+    path := meta.(1);
+    return HttpRequest(method, path);
+}
+
+fun makeRelative(path) {
+    prevLen := strlen(path);
+    result := replaceAll(path, "..", ".");
+    while() {
+        wasDiff := strlen(result) != prevLen;
+        prevLen = strlen(result);
+        wasDiff;
+    } {
+        result = replaceAll(result, "..", ".");
+        result = replaceAll(result, "/./", "/");
+    };
+    return result;
+}
+
+fun isDirName(path) {
+    pathlen := strlen(path);
+    lastChar := strslice(path, pathlen - 1, pathlen);
+    return match lastChar {
+        "/" -> true;
+        _ -> match (fileExt(path)) {
+            nil -> true;
+            _ -> false;
+        };
+    };
+}
+
+args := process_args();
+port := parse_float(args.(0));
+
+print("Starting server on port " + str(port));
+listen_tcp("0.0.0.0", port) fun (connection) {
+    connection.on_data() fun (data) {
+        info := parse_http(text_decode(data));
+        print("[" + str(clock()) + "] " + info.method + " " + info.path);
+
+        filepath := makeRelative(info.path);
+        match (isDirName(info.path)) {
+            true -> filepath = info.path + "/index.html";
+            _ -> ();
+        };
+        contents := readfile_bytes("." + filepath);
+
+        mime := match (fileExt(filepath)) {
+            ".html" -> "text/html";
+            ".htm" -> "text/html";
+            ".css" -> "text/css";
+            ".js" -> "text/javascript";
+            ".txt" -> "text/plain";
+            ".ico" -> "image/x-icon";
+            ".png" -> "image/png";
+            ".jpg" -> "image/jpg";
+            _ -> "text/plain";
+        };
+
+        match contents {
+            nil -> {
+                message := "Path not found: " + info.path;
+                headers := "HTTP/1.1 404 NOT FOUND\nContent-Type: text/plain\nContent-Length: " + str(strlen(message)) + "\n\n";
+                connection.write(text_encode(headers + message));
+                return connection.close();
+            }
+            _ -> ();
+        };
+
+        headers := "HTTP/1.1 200 OK\nContent-Type: " + mime + "\nContent-Length: " + str(len(contents)) + "\n\n";
+        connection.write(bytes_concat(text_encode(headers), contents));
+        connection.close();
+    };
+};
