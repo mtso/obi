@@ -1,0 +1,5 @@
+yeller := mod("./_yeller.obi");
+
+y := yeller.Yeller("Potter");
+y.greet();
+// expect: "Hello, Potter!!!"

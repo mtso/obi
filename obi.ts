@@ -1069,7 +1069,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
         return container;
       }
     }
-
     class RtMod extends Callable {
       arity(): number {
         return 1;
@@ -1077,7 +1076,7 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
       call(interpreter: Interpreter, args: any[]): any {
         const location = path.join(path.dirname(ENTRY_FILE), args[0]);
         const source = Deno.readTextFileSync(location);
-        const module = loadModule(source);
+        const module = interpreter.loadModule(source);
         return module;
       }
     }
@@ -1167,18 +1166,44 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     this.globals.define("mod", new RtMod());
   }
 
-  interpretTopLevel(statements: Stmt[]) {
-    try {
-      for (const statement of statements) {
-        const _ = this.execute(statement);
-      }
-    } catch (err) {
-      if (err instanceof RuntimeError) {
-        Obi.runtimeError(err);
-      } else {
-        throw err;
-      }
+  loadModule(source: string): ObiInstance {
+    const module = new ObiInstance(MODULE_CLASS);
+
+    const scanner = new Scanner(source);
+    const tokens = scanner.scanTokens();
+    const parser = new Parser(tokens);
+    const statements = parser.parse();
+    const wrapped = new stmt.Block(statements);
+
+    if (Obi.hadError) {
+      throw new Error("Failed to load module");
     }
+
+    const resolver = new Resolver(this);
+    resolver.resolveStmts([wrapped]);
+
+    const moduleEnvironment = new Environment(this.environment);
+
+    if (Obi.hadError) {
+      throw new Error("Failed to resolve prelude");
+    }
+
+    const result = this.executeBlock(statements, moduleEnvironment);
+
+    moduleEnvironment.values.forEach((val, key) => {
+      if (val instanceof ObiFunction) {
+        const fn = val as ObiFunction;
+        const name = fn.getDeclaration().name;
+        if (!name) return;
+        module.setDyn(name.lexeme, fn, name);
+      } else if (val instanceof ObiClass) {
+        const klass = val as ObiClass;
+        if (!klass.where) return;
+        module.setDyn(klass.name, klass, klass.where);
+      }
+    });
+
+    return module;
   }
 
   async interpret(statements: Stmt[]) {
@@ -2434,46 +2459,6 @@ const MODULE_CLASS = new ObiClass(
   null,
   new Map<string, ObiFunction>(),
 );
-
-function loadModule(source: string) {
-  const module = new ObiInstance(MODULE_CLASS);
-
-  const scanner = new Scanner(source);
-  const tokens = scanner.scanTokens();
-  const parser = new Parser(tokens);
-  const statements = parser.parse();
-  const interpreter = new Interpreter();
-
-  if (Obi.hadError) {
-    throw new Error("Failed to load prelude");
-  }
-
-  const resolver = new Resolver(interpreter);
-  resolver.resolveStmts(statements);
-
-  if (Obi.hadError) {
-    throw new Error("Failed to resolve prelude");
-  }
-
-  interpreter.interpretTopLevel(statements);
-
-  const env = interpreter.getEnvironment();
-
-  env.values.forEach((val, key) => {
-    if (val instanceof ObiFunction) {
-      const fn = val as ObiFunction;
-      const name = fn.getDeclaration().name;
-      if (!name) return;
-      module.setDyn(name.lexeme, fn, name);
-    } else if (val instanceof ObiClass) {
-      const klass = val as ObiClass;
-      if (!klass.where) return;
-      module.setDyn(klass.name, klass, klass.where);
-    }
-  });
-
-  return module;
-}
 
 function loadPrelude(source: string) {
   const scanner = new Scanner(source);

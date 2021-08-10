@@ -1,0 +1,11 @@
+class Greeter {
+    init(name) {
+        this.name = name;
+    }
+    greet() {
+        print("Hello, " + this.getName());
+    }
+    getName() {
+        return this.name;
+    }
+}

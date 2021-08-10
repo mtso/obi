@@ -1,0 +1,11 @@
+greet := mod("./nested/_greet.obi");
+Greeter := greet.Greeter;
+
+class Yeller < Greeter {
+    greet() {
+        super.greet();
+    }
+    getName() {
+        return this.name + "!!!";
+    }
+}

@@ -1,4 +1,4 @@
-life := mod("./life.obi");
+life := mod("./_life.obi");
 
 print(life.meaning()); // expect: "42"
 

@@ -1,0 +1,19 @@
+fun fib(n) {
+    match n < 0 {
+        true -> return 0;
+        _ -> ();
+    };
+
+    fun fib'(n, a, b) {
+        match n {
+            0 -> return a;
+            1 -> return b;
+            _ -> ();
+        };
+        fib'(n - 1, b, a + b);
+    }
+
+    fib'(n, 0, 1);
+}
+
+print(fib(9)); // expect: "34"
