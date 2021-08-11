@@ -1,16 +1,15 @@
-class Object {}
-class List {
-    init() {
-        this._items = Object();
-        this.len = 0;
-    }
-    add(item) {
-        this._items.(this.len) = item;
-        this.len = this.len + 1;
-    }
-    get(i) {
-        return this._items.(i);
-    }
+fun List() {
+    self := [
+        len = 0,
+        add = fun(el) {
+            self.(self.len) = el;
+            self.len = self.len + 1;
+        },
+        get = fun(i) {
+            return self.(i);
+        },
+    ];
+    return self;
 }
 
 fun while(p, f) {

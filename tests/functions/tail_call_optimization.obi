@@ -1,16 +1,16 @@
 fun while'(p, f) {
-  match (p()) {
-    false -> return;
-    _ -> ();
-  };
-  f();
-  while'(p, f);
+    match (p()) {
+        false -> return;
+        _ -> ();
+    };
+    f();
+    while'(p, f);
 }
 
 i := 0;
 while'() { i < 10000; } {
-  print(i);
-  i = i + 1;
+    print(i);
+    i = i + 1;
 };
 // expect: "0"
 // expect: "1"

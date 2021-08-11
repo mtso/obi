@@ -219,9 +219,9 @@ export class RtListenTcp implements ObiCallable {
           }
           call(interpreter: Interpreter, args: any[]): any {
             if (closed) return;
-            const data = args[0] as Bytes;
+            const data = args[0] as Uint8Array;
             try {
-              conn.write(data.bytes);
+              conn.write(data);
             } catch (err) {
               console.log(err);
             }
@@ -240,7 +240,7 @@ export class RtListenTcp implements ObiCallable {
               if (closed) return;
               try {
                 const bytes = await readAllBytes(conn);
-                receiver.call(interpreter, [new Bytes(bytes)]);
+                receiver.call(interpreter, [bytes]);
               } catch (err) {
                 if (err.name === "Interrupted") {
                   if (!closed) closed = true;
@@ -351,7 +351,7 @@ export class RtReadfileBytes implements ObiCallable {
   call(interpreter: Interpreter, args: any[]): any {
     try {
       const contents = Deno.readFileSync(args[0]);
-      return new Bytes(contents);
+      return contents;
     } catch (err) {
       if (err.name === "NotFound") {
         return null;
@@ -415,7 +415,7 @@ export class RtTextEncode implements ObiCallable {
   }
   call(interpreter: Interpreter, args: any[]): any {
     const bytes = (new TextEncoder()).encode(args[0]);
-    return new Bytes(bytes);
+    return bytes;
   }
 }
 export class RtTextDecode implements ObiCallable {
@@ -423,13 +423,13 @@ export class RtTextDecode implements ObiCallable {
     return 1;
   }
   call(interpreter: Interpreter, args: any[]): any {
-    if (!(args[0] instanceof Bytes)) {
+    if (!(args[0] instanceof Uint8Array)) {
       throw new RuntimeError(
         {} as Token,
-        `text_decode called on "${typeof args[0]}"`,
+        `text_decode2 called on "${typeof args[0]}"`,
       );
     }
-    return (new TextDecoder()).decode(args[0].bytes);
+    return (new TextDecoder()).decode(args[0]);
   }
 }
 export class RtBytesConcat implements ObiCallable {
@@ -439,20 +439,16 @@ export class RtBytesConcat implements ObiCallable {
   call(interpreter: Interpreter, args: any[]): any {
     const a = args[0];
     const b = args[1];
-    if (!(a instanceof Bytes && b instanceof Bytes)) {
+    if (!(a instanceof Uint8Array && b instanceof Uint8Array)) {
       throw new RuntimeError(
-        new Token(TT.IDENTIFIER, "bytes_concat", null, 0, 0),
-        "Expect both arguments to be Bytes",
+        new Token(TT.IDENTIFIER, "bytes_concat2", null, 0, 0),
+        "Expect both arguments to be byte arrays.",
       );
     }
-    const result = new Uint8Array(a.bytes.length + b.bytes.length);
-    for (let i = 0; i < a.bytes.length; i++) {
-      result[i] = a.bytes[i];
-    }
-    for (let j = 0; j < b.bytes.length; j++) {
-      result[a.bytes.length + j] = b.bytes[j];
-    }
-    return new Bytes(result);
+    const result = new Uint8Array(a.length + b.length);
+    result.set(a);
+    result.set(b, a.length);
+    return result;
   }
 }
 export class RtParseFloat implements ObiCallable {
@@ -491,8 +487,8 @@ export class RtLoadWasm implements ObiCallable {
     return 1;
   }
   call(interpreter: Interpreter, args: any[]): any {
-    const wasmCode = args[0] as Bytes;
-    const wasmModule = new WebAssembly.Module(wasmCode.bytes);
+    const wasmCode = args[0] as Uint8Array;
+    const wasmModule = new WebAssembly.Module(wasmCode);
     const wasmInstance = new WebAssembly.Instance(wasmModule);
     const obiWasmInstance = new ObiInstance(this.wasmClass);
     const keys = Object.keys(wasmInstance.exports);

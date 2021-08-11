@@ -1,35 +1,36 @@
-class Queue {
-    init() {
-        this.items = Object();
-        this.head = 0;
-        this.tail = 0;
-    }
-    empty() {
-        return this.size() <= 0;
-    }
-    size() {
-        return this.tail - this.head;
-    }
-    add(item) {
-        this.items.(this.tail) = item;
-        this.tail = this.tail + 1;
-    }
-    poll() {
-        match (this.empty()) {
-            true -> return nil;
-            _ -> ();
-        };
-        item := this.items.(this.head);
-        this.head = this.head + 1;
-        return item;
-    }
-    peek() {
-        match (this.empty()) {
-            true -> return nil;
-            _ -> ();
-        };
-        return this.items.(this.head);
-    }
+fun Queue() {
+    self := [
+        items = [],
+        head = 0,
+        tail = 0,
+        empty = fun() {
+            return self.size() <= 0;
+        },
+        size = fun() {
+            return self.tail - self.head;
+        },
+        add = fun(item) {
+            self.items.(self.tail) = item;
+            self.tail = self.tail + 1;
+        },
+        poll = fun() {
+            match (self.empty()) {
+                true -> return nil;
+                _ -> ();
+            };
+            item := self.items.(self.head);
+            self.head = self.head + 1;
+            return item;
+        },
+        peek = fun() {
+            match (self.empty()) {
+                true -> return nil;
+                _ -> ();
+            };
+            return self.items.(self.head);
+        },
+    ];
+    return self;
 }
 
 q := Queue();

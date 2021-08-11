@@ -1,0 +1,22 @@
+fun makeFoo(name) {
+    _name := name;
+    return [
+        setName = fun(name) {
+            _name = name;
+        },
+        getName = fun(name) {
+            return _name;
+        },
+        greet = fun() {
+            print("hello, " + _name);
+        }
+    ];
+}
+
+foo := makeFoo("Harry");
+
+foo.greet(); // expect: "hello, Harry"
+
+foo.setName("Charles");
+
+foo.greet(); // expect: "hello, Charles"

@@ -1,0 +1,10 @@
+data := [
+    9,
+    foo="bar",
+    "three",
+];
+
+print(data.(0)); // expect: "9"
+print(data.(1)); // expect: "three"
+print(data.("foo")); // expect: "bar"
+print(data.foo); // expect: "bar"

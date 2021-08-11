@@ -1,0 +1,25 @@
+fun nameBuilder() {
+    _first := nil;
+    _last := nil;
+    self := [
+        setFirst = fun(first) {
+            _first = first;
+            return self;
+        },
+        setLast = fun(last) {
+            _last = last;
+            return self;
+        },
+        build = fun() {
+            return str(_first) + " " + str(_last);
+        }
+    ];
+    return self;
+}
+
+name := nameBuilder()
+    .setFirst("Charles")
+    .setLast("Xian")
+    .build();
+
+print(name); // expect: "Charles Xian"

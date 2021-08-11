@@ -21,6 +21,7 @@ export module expr {
     visitLiteralExpr: (exp: Literal) => T;
     visitMatchExpr: (exp: Match) => T;
     visitLogicalExpr: (exp: Logical) => T;
+    visitTableExpr: (exp: Table) => T;
     visitUnaryExpr: (exp: Unary) => T;
     visitVariableExpr: (exp: Variable) => T;
   };
@@ -216,6 +217,17 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitLogicalExpr(this);
+    }
+  }
+  export class Table extends Expr {
+    values: Expr[];
+
+    constructor(values: Expr[]) {
+      super();
+      this.values = values;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitTableExpr(this);
     }
   }
   export class Unary extends Expr {

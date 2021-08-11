@@ -196,3 +196,13 @@ delay(fun() {
 }, 2);
 
 delay(fun() { print("bye"); }, 2); print("hi"); sleep(4); print("what");
+
+Values
+
+- numbers (floats)
+- strings (javascript strings)
+- booleans
+- nils
+- tables
+- byte arrays (no literal representation, must instantiate with
+  new_buffer(<cap>))

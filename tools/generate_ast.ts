@@ -60,6 +60,7 @@ const defineAst = (baseName: string, types: string[]) => {
     "Literal  = value: any",
     "Match    = where: Token, against: Expr, cases: Case[]",
     "Logical  = left: Expr, operator: Token, right: Expr",
+    "Table    = values: Expr[]",
     "Unary    = operator: Token, right: Expr",
     "Variable = name: Token",
   ]);

@@ -210,6 +210,11 @@ export class ObiFunction implements ObiCallable {
     environment.define("this", instance);
     return new ObiFunction(this.declaration, environment, this.isInitializer);
   }
+  bindTable(instance: ObiTable): ObiFunction {
+    const environment = new Environment(this.closure);
+    environment.define("this", instance);
+    return new ObiFunction(this.declaration, environment, this.isInitializer);
+  }
   call(interpreter: Interpreter, args: any[]): any {
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
@@ -331,6 +336,38 @@ export class ObiInstance {
   }
 }
 
+export class ObiTable {
+  private fields: Map<string, any> = new Map<string, any>();
+  toString() {
+    return "<table>";
+  }
+  get(name: Token): any {
+    return this.getDyn(name.lexeme);
+  }
+  getDyn(name: any): any {
+    if (this.fields.has(name)) {
+      const value = this.fields.get(name);
+      // Adds "this" recognition to functions on tables,
+      // but in return the scopes must be matched (and fixed);
+      // if (value instanceof ObiFunction) {
+      //   const method = value as ObiFunction;
+      //   return method.bindTable(this);
+      // }
+      return value;
+    }
+    return null;
+  }
+  set(name: Token, value: any) {
+    this.setDyn(name.lexeme, value);
+  }
+  setDyn(name: any, value: any): any {
+    this.fields.set(name, value);
+  }
+  getFields(): Map<string, any> {
+    return this.fields;
+  }
+}
+
 export class RuntimeError extends Error {
   token: Token;
   constructor(token: Token, message: string) {
@@ -399,10 +436,19 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
     const scope = this.scopes[this.scopes.length - 1];
     scope.set(name.lexeme, true);
   }
+  count: number = 0;
   resolveLocal(exp: Expr, name: Token) {
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       if (this.scopes[i].has(name.lexeme)) {
         this.interpreter.resolve(exp, this.scopes.length - 1 - i);
+        return;
+      }
+    }
+  }
+  resolveLocalTable(exp: Expr, name: Token) {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      if (this.scopes[i].has(name.lexeme)) {
+        this.interpreter.resolve(exp, this.scopes.length - i);
         return;
       }
     }
@@ -543,6 +589,13 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
       if (null !== case_.pattern) this.resolveExpr(case_.pattern);
       this.resolveStmt(case_.branch);
     }
+  }
+  visitTableExpr(exp: expr.Table) {
+    this.beginScope();
+    for (const value of exp.values) {
+      this.resolveExpr(value);
+    }
+    this.endScope();
   }
   visitThisExpr(exp: expr.This) {
     if (this.currentClass === ClassType.NONE) {
@@ -959,7 +1012,7 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     for (const arg of exp.args) {
       args.push(this.evaluate(arg));
     }
-    if (!("arity" in callee && "call" in callee)) {
+    if (!(callee && "arity" in callee && "call" in callee)) {
       throw new RuntimeError(exp.paren, "Can only call functions.");
     }
     const func = callee as ObiCallable;
@@ -983,13 +1036,34 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     if (object instanceof ObiInstance) {
       return (object as ObiInstance).get(exp.name);
     }
+    if (object instanceof ObiTable) {
+      return (object as ObiTable).get(exp.name);
+    }
+    if (object instanceof Uint8Array) {
+      const name = exp.name;
+      if (name.lexeme === "len") {
+        return (object as Uint8Array).length;
+      } else if (typeof (name.literal) === "number") {
+        return (object as Uint8Array)[exp.name.literal];
+      }
+    }
     throw new RuntimeError(exp.name, "Only instances have properties.");
   }
   visitGetDynExpr(exp: expr.GetDyn): any {
     const object = this.evaluate(exp.object);
+    const name = this.evaluate(exp.name);
     if (object instanceof ObiInstance) {
-      const name = this.evaluate(exp.name);
       return (object as ObiInstance).getDyn(name, exp.dot);
+    }
+    if (object instanceof ObiTable) {
+      return (object as ObiTable).getDyn(name);
+    }
+    if (object instanceof Uint8Array) {
+      if (name === "len") {
+        return (object as Uint8Array).length;
+      } else if (typeof (name) === "number") {
+        return (object as Uint8Array)[name];
+      }
     }
     throw new RuntimeError(exp.dot, "Only instances have properties.");
   }
@@ -1011,21 +1085,37 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
   }
   visitSetExpr(exp: expr.Set): any {
     const object = this.evaluate(exp.object);
-    if (!(object instanceof ObiInstance)) {
+    if (!(object instanceof ObiInstance || object instanceof ObiTable)) {
       throw new RuntimeError(exp.name, "Only instances have fields.");
     }
     const value = this.evaluate(exp.value);
-    (object as ObiInstance).set(exp.name, value);
+    if (object instanceof ObiTable) {
+      (object as ObiTable).set(exp.name, value);
+    } else {
+      (object as ObiInstance).set(exp.name, value);
+    }
     return value;
   }
   visitSetDynExpr(exp: expr.SetDyn): any {
     const object = this.evaluate(exp.object);
-    if (!(object instanceof ObiInstance)) {
+    if (
+      !(object instanceof ObiInstance || object instanceof ObiTable ||
+        object instanceof Uint8Array)
+    ) {
       throw new RuntimeError(exp.dot, "Only instances have fields.");
     }
     const name = this.evaluate(exp.name);
     const value = this.evaluate(exp.value);
-    (object as ObiInstance).setDyn(name, value, exp.dot);
+    if (object instanceof ObiTable) {
+      (object as ObiTable).setDyn(name, value);
+    } else if (object instanceof ObiInstance) {
+      (object as ObiInstance).setDyn(name, value, exp.dot);
+    } else if ((object as any) instanceof Uint8Array) {
+      if (typeof name === "number") {
+        (object as Uint8Array)[name] = value;
+      }
+    }
+    return value;
   }
   visitSuperExpr(exp: expr.Super): any {
     const distance = this.locals.get(exp) as number;
@@ -1058,6 +1148,28 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     Obi.errorToken(exp.where, "Un-matched match block.");
     return null;
   }
+  visitTableExpr(exp: expr.Table): any {
+    const table = new ObiTable();
+    let index = 0;
+
+    this.environment = new Environment(this.environment);
+
+    for (const value_ of exp.values) {
+      if (value_ instanceof expr.Assign) {
+        const assign = value_ as expr.Assign;
+        const value = this.evaluate(assign.value);
+        table.setDyn(assign.name.lexeme, value);
+      } else {
+        const value = this.evaluate(value_);
+        table.setDyn(index as any, value);
+        index += 1;
+      }
+    }
+
+    this.environment = this.environment.enclosing as Environment;
+
+    return table;
+  }
   visitThisExpr(exp: expr.This): any {
     return this.lookupVariable(exp.keyword, exp);
   }
@@ -1076,6 +1188,9 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     return null;
   }
   visitVariableExpr(exp: expr.Variable): any {
+    // if (exp.name.lexeme == "_defined") {
+    //   console.log(this.environment, this.locals.get(exp), this.lookupVariable(exp.name, exp))
+    // }
     return this.lookupVariable(exp.name, exp);
   }
 
@@ -1120,7 +1235,7 @@ export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     if (typeof object === "string") {
       return object;
     }
-    if (object.toString) {
+    if (object && object.toString) {
       return object.toString();
     }
     return JSON.stringify(object);
@@ -1440,26 +1555,23 @@ class Parser {
     return exp;
   }
 
-  table() {
-    const table: { [key: string]: any } = {};
+  private table(): expr.Table {
+    const values: Expr[] = [];
     let index = 0;
-
     while (true) {
       if (this.isAtEnd()) {
-        throw this.error(this.peek(), "Unterminated table");
-      } else if (this.match(TT.RIGHT_BRACKET)) {
         break;
+      } else if (this.match(TT.RIGHT_BRACKET)) {
+        return new expr.Table(values);
       } else {
-        const item = this.expression();
-        table[index] = item;
-        index += 1;
-        if (!this.check(TT.RIGHT_BRACKET)) {
-          this.consume(TT.COMMA, "Expect ',' separating elements in table.");
+        const value = this.expression();
+        values.push(value);
+        if (this.peek().type !== TT.RIGHT_BRACKET) {
+          this.consume(TT.COMMA, "Expect ',' after value in table literal.");
         }
       }
     }
-
-    return table;
+    throw this.error(this.peek(), "Unterminated table literal.");
   }
 
   private primary(): Expr {
@@ -1469,6 +1581,10 @@ class Parser {
 
     if (this.match(TT.NUMBER)) return new expr.Literal(this.previous().literal);
     if (this.match(TT.STRING)) return new expr.Literal(this.previous().literal);
+
+    if (this.match(TT.LEFT_BRACKET)) {
+      return this.table();
+    }
 
     if (this.match(TT.SUPER)) {
       const keyword = this.previous();
@@ -1480,7 +1596,9 @@ class Parser {
       return new expr.Super(keyword, method);
     }
 
-    if (this.match(TT.THIS)) return new expr.This(this.previous());
+    if (this.match(TT.THIS)) {
+      return new expr.This(this.previous());
+    }
 
     if (this.match(TT.IDENTIFIER)) {
       return new expr.Variable(this.previous());
@@ -1675,14 +1793,14 @@ class Scanner {
         this.addToken(TT.RIGHT_BRACE);
         this.column += 1;
         break;
-      // case "[":
-      //   this.addToken(TT.LEFT_BRACKET);
-      //   this.column += 1;
-      //   break;
-      // case "]":
-      //   this.addToken(TT.RIGHT_BRACKET);
-      //   this.column += 1;
-      //   break;
+      case "[":
+        this.addToken(TT.LEFT_BRACKET);
+        this.column += 1;
+        break;
+      case "]":
+        this.addToken(TT.RIGHT_BRACKET);
+        this.column += 1;
+        break;
       case ",":
         this.addToken(TT.COMMA);
         this.column += 1;

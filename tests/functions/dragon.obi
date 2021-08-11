@@ -1,13 +1,13 @@
 fun dragon(n) {
-  fun dragon'(n, turn) {
-    match n <= 0 {
-      true -> return turn;
-      _ -> ();
-    };
-    dragon'(n - 1, "R") + turn + dragon'(n - 1, "L");
-  }
+    fun dragon'(n, turn) {
+        match n <= 0 {
+            true -> return turn;
+            _ -> ();
+        };
+        dragon'(n - 1, "R") + turn + dragon'(n - 1, "L");
+    }
 
-  return dragon'(n, "");
+    return dragon'(n, "");
 }
 
 print(dragon(5));

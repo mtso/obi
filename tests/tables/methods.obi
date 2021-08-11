@@ -1,0 +1,12 @@
+foo := [
+    name = "Harry",
+    hi = fun() {
+        print("hi");
+    },
+    greet = fun() {
+        print("hello, " + foo.name);
+    }
+];
+
+foo.hi(); // expect: "hi"
+foo.greet(); // expect: "hello, Harry"

@@ -1,79 +1,64 @@
-class Queue {
-    init() {
-        this.items = Object();
-        this.head = 0;
-        this.tail = 0;
-    }
-    empty() {
-        return this.size() <= 0;
-    }
-    size() {
-        return this.tail - this.head;
-    }
-    add(item) {
-        this.items.(this.tail) = item;
-        this.tail = this.tail + 1;
-    }
-    poll() {
-        match (this.empty()) {
-            true -> return nil;
-            _ -> ();
-        };
-        item := this.items.(this.head);
-        this.head = this.head + 1;
-        return item;
-    }
-    peek() {
-        match (this.empty()) {
-            true -> return nil;
-            _ -> ();
-        };
-        return this.items.(this.head);
-    }
-}
-
-class Map {
-    init() {
-        this.items = Object();
-        this.defined = Object();
-    }
-    get(key) {
-        return match (this.defined.(key)) {
-            true -> this.items.(key);
-            _ -> nil;
-        };
-    }
-    set(key, value) {
-        this.items.(key) = value;
-        this.defined.(key) = true;
-    }
-    has(key) {
-        return match (this.defined.(key)) {
-            true -> true;
-            _ -> false;
-        };
-    }
-    unset(key) {
-        this.items.(key) = nil;
-        this.defined.(key) = false;
-    }
-    keys() {
-        result := Object();
-        itemKeys := keys(this.items);
-        resultLen := 0;
-        i := 0; while() { i < itemKeys.len; } {
-            match (this.defined.(itemKeys.(i))) {
-                true -> {
-                    result.(resultLen) = itemKeys.(i);
-                    resultLen = resultLen + 1;
-                }
+fun Queue() {
+    self := [
+        items = [],
+        head = 0,
+        tail = 0,
+        empty = fun() {
+            return self.size() <= 0;
+        },
+        size = fun() {
+            return self.tail - self.head;
+        },
+        add = fun(item) {
+            self.items.(self.tail) = item;
+            self.tail = self.tail + 1;
+        },
+        poll = fun() {
+            match (self.empty()) {
+                true -> return nil;
                 _ -> ();
             };
-            i = i + 1;
-        };
-        result.("len") = resultLen;
-        return result;
-    }
+            item := self.items.(self.head);
+            self.head = self.head + 1;
+            return item;
+        },
+        peek = fun() {
+            match (self.empty()) {
+                true -> return nil;
+                _ -> ();
+            };
+            return self.items.(self.head);
+        },
+    ];
+    return self;
+}
+
+fun Map() {
+    self := [
+        defined = [],
+        items = [],
+        get = fun(key) {
+            return match (self.defined.(key)) {
+                true -> self.items.(key);
+                _ -> nil;
+            };
+        },
+        set = fun(key, value) {
+            self.items.(key) = value;
+            self.defined.(key) = true;
+        },
+        has = fun(key) {
+            return match (self.defined.(key)) {
+                true -> true;
+                _ -> false;
+            };
+        },
+        unset = fun(key) {
+            self.items.(key) = nil;
+            self.defined.(key) = false;
+        },
+    ];
+    return self;
 }
 
 fun reverseList(list) {

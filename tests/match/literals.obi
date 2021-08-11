@@ -1,13 +1,13 @@
 match 5 {
-  5 -> print("is 5");
-  4 -> print("is 4");
+    5 -> print("is 5");
+    4 -> print("is 4");
 };
 // expect: "is 5"
 
 event := "foo";
 match event {
-  "bar" -> print("event bar");
-  "foo" -> print("event foo");
-  _ -> print("other event");
+    "bar" -> print("event bar");
+    "foo" -> print("event foo");
+    _ -> print("other event");
 };
 // expect: "event foo"

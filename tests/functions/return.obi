@@ -1,8 +1,8 @@
 fun foo(a) {
-  match(a) {
-    5 -> return "5";
-    _ -> return "not 5";
-  };
+    match(a) {
+        5 -> return "5";
+        _ -> return "not 5";
+    };
 }
 
 print(foo(5)); // expect: "5"
