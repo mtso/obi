@@ -2,6 +2,7 @@ import { delay as DenoDelay } from "https://deno.land/std@0.103.0/async/mod.ts";
 import * as path from "https://deno.land/std@0.103.0/path/mod.ts";
 
 import { expr, stmt } from "./ast.ts";
+import * as runtime from "./runtime.ts";
 
 class WaitGroup {
   count: number = 0;
@@ -24,12 +25,10 @@ class WaitGroup {
   }
 }
 
-let ENTRY_FILE: string = Deno.cwd();
-
 type Expr = expr.Expr;
 type Stmt = stmt.Stmt;
 
-enum TokenType {
+export enum TokenType {
   // Single-character tokens.
   LEFT_PAREN,
   RIGHT_PAREN,
@@ -95,7 +94,7 @@ enum TokenType {
   EOF,
 }
 
-const TT = TokenType;
+export const TT = TokenType;
 
 export class Token {
   type: TokenType;
@@ -126,7 +125,7 @@ export class Token {
   }
 }
 
-class Environment {
+export class Environment {
   enclosing: Environment | null;
   values: Map<string, any> = new Map<string, any>();
 
@@ -180,10 +179,10 @@ class Environment {
   }
 }
 
-abstract class Callable {
-  abstract arity(): number;
-  abstract call(interpreter: Interpreter, args: any[]): any;
-}
+export type ObiCallable = {
+  arity(): number;
+  call(interpreter: Interpreter, args: any[]): any;
+};
 
 enum FunctionType {
   NONE,
@@ -192,7 +191,7 @@ enum FunctionType {
   INITIALIZER,
 }
 
-class ObiFunction extends Callable {
+export class ObiFunction implements ObiCallable {
   private declaration: expr.Function;
   private closure: Environment;
   isInitializer: boolean;
@@ -202,7 +201,6 @@ class ObiFunction extends Callable {
     closure: Environment,
     isInitializer: boolean,
   ) {
-    super();
     this.declaration = declaration;
     this.closure = closure;
     this.isInitializer = isInitializer;
@@ -249,7 +247,7 @@ enum ClassType {
   SUBCLASS,
 }
 
-class ObiClass extends Callable {
+export class ObiClass implements ObiCallable {
   name: string;
   where?: Token;
   private methods: Map<string, ObiFunction>;
@@ -260,7 +258,6 @@ class ObiClass extends Callable {
     methods: Map<string, ObiFunction>,
     where?: Token,
   ) {
-    super();
     this.name = name;
     this.superclass = superclass;
     this.methods = methods;
@@ -296,7 +293,7 @@ class ObiClass extends Callable {
   }
 }
 
-class ObiInstance {
+export class ObiInstance {
   klass: ObiClass;
   private fields: Map<string, any> = new Map<string, any>();
   constructor(klass: ObiClass) {
@@ -334,7 +331,7 @@ class ObiInstance {
   }
 }
 
-class RuntimeError extends Error {
+export class RuntimeError extends Error {
   token: Token;
   constructor(token: Token, message: string) {
     super(message);
@@ -571,20 +568,6 @@ class Resolver implements expr.Visitor<void>, stmt.Visitor<void> {
   }
 }
 
-module runtime {
-  export class Print extends Callable {
-    arity(): number {
-      return 1;
-    }
-    call(interpreter: Interpreter, args: any[]): any {
-      console.log(Interpreter.stringify(args[0]));
-    }
-    toString(): string {
-      return "<native fn>";
-    }
-  }
-}
-
 const PRELUDE = `class Object {}
 
 class List {
@@ -665,7 +648,7 @@ fun each(list, fn) {
     };
 }`;
 
-class Bytes extends ObiInstance {
+export class Bytes extends ObiInstance {
   bytes: Uint8Array;
   constructor(bytes: Uint8Array) {
     super(new ObiClass("Bytes", null, new Map<string, ObiFunction>()));
@@ -696,7 +679,8 @@ class Bytes extends ObiInstance {
   }
 }
 
-class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
+export class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
+  entryFile: string = "";
   globals: Environment = new Environment();
   environment: Environment = this.globals;
   private locals: Map<Expr, number> = new Map<Expr, number>();
@@ -706,464 +690,29 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
   constructor() {
     this.globals.define("print", new runtime.Print());
+    this.globals.define("clock", new runtime.RtClock());
+    this.globals.define("delay", new runtime.RtDelay());
+    this.globals.define("clearDelay", new runtime.RtClearDelay());
+    this.globals.define("type", new runtime.RtType());
+    this.globals.define("keys", new runtime.RtKeys());
+    this.globals.define("str", new runtime.RtStr());
+    this.globals.define("strlen", new runtime.RtStrlen());
+    this.globals.define("strslice", new runtime.RtStrslice());
+    this.globals.define("parse_float", new runtime.RtParseFloat());
+    this.globals.define("listen_tcp", new runtime.RtListenTcp());
+    this.globals.define("readfile", new runtime.RtReadfile());
+    this.globals.define("readfile_bytes", new runtime.RtReadfileBytes());
+    this.globals.define("bytes_concat", new runtime.RtBytesConcat());
+    this.globals.define("process_args", new runtime.RtProcessArgs());
+    this.globals.define("text_encode", new runtime.RtTextEncode());
+    this.globals.define("text_decode", new runtime.RtTextDecode());
+    this.globals.define("len", new runtime.RtLen());
+    this.globals.define("mod", new runtime.RtMod());
+    this.globals.define("load_wasm", new runtime.RtLoadWasm());
+  }
 
-    const obiArrayClass = new ObiClass(
-      "ObiArray",
-      null,
-      new Map<string, ObiFunction>(),
-    );
-
-    class RtDelay extends Callable {
-      arity(): number {
-        return 2;
-      }
-
-      call(interpreter: Interpreter, args: any[]): any {
-        const by = args[0] as number;
-        const func = args[1] as ObiFunction;
-
-        const id = Math.random();
-        interpreter.waitGroup.add(1);
-        const timer = setTimeout(() => {
-          func.call(interpreter, []);
-          interpreter.waitGroup.done();
-        }, by);
-        interpreter.timers.set(id, timer);
-        return id;
-      }
-    }
-
-    class RtClearDelay extends Callable {
-      arity(): number {
-        return 1;
-      }
-
-      call(interpreter: Interpreter, args: any[]): any {
-        const id = args[0] as number;
-        const timer = interpreter.timers.get(id);
-        clearTimeout(timer);
-      }
-    }
-
-    class RtType extends Callable {
-      arity(): number {
-        return 1;
-      }
-
-      call(interpreter: Interpreter, args: any[]): any {
-        const e = args[0];
-        if (e instanceof ObiInstance) {
-          return e.toString().split(" instance")[0];
-        } else if (e instanceof ObiFunction) {
-          return "function";
-        } else {
-          return (typeof e);
-        }
-      }
-    }
-
-    class RtKeys extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const o = args[0] as ObiInstance;
-        const fields = o.getFields();
-        const array = new ObiInstance(obiArrayClass);
-        let i = 0;
-        for (const key of fields.keys()) {
-          array.setDyn(
-            i,
-            key,
-            new Token(TT.NUMBER, JSON.stringify(i), i, 0, 0),
-          );
-          i += 1;
-        }
-        array.setDyn("len", i, new Token(TT.IDENTIFIER, "len", null, 0, 0));
-        return array;
-      }
-    }
-
-    class RtListenTcp extends Callable {
-      arity(): number {
-        return 3;
-      }
-
-      call(interpreter: Interpreter, args: any[]): any {
-        const hostname = args[0] as string;
-        const port = args[1] as number;
-        const handler = args[2] as ObiFunction;
-
-        async function readAll(reader: Deno.Reader) {
-          const buf = new Uint8Array(4096);
-          let data = "";
-          let len = 4096;
-          while (len >= 4096) {
-            const read = await reader.read(buf);
-            if (!read) break;
-            len = read;
-            data += (new TextDecoder()).decode(buf.slice(0, len));
-          }
-          return data;
-        }
-        async function readAllBytes(reader: Deno.Reader) {
-          const buf = new Uint8Array(4096);
-          let data = "";
-          const CHUNK_SIZE = 4096;
-          let len = CHUNK_SIZE;
-          const chunks = [];
-          while (len >= CHUNK_SIZE) {
-            const read = await reader.read(buf);
-            if (!read) break;
-            len = read;
-            chunks.push(buf.slice(0, len));
-          }
-          if (chunks.length < 1) {
-            return new Uint8Array(0);
-          }
-          const totalSize = (chunks.length - 1) * CHUNK_SIZE +
-            (chunks[chunks.length - 1].length);
-          const result = new Uint8Array(totalSize);
-          for (let i = 0; i < chunks.length; i++) {
-            for (let j = 0; j < chunks[i].length; j++) {
-              result[i * CHUNK_SIZE + j] = chunks[i][j];
-            }
-          }
-          return result;
-        }
-
-        class R {
-          bytes: Uint8Array;
-          where: number = 0;
-          done: boolean = false;
-          constructor(bytes: Uint8Array) {
-            this.bytes = bytes;
-          }
-          async read(to: Uint8Array): Promise<number | null> {
-            if (this.done) return Promise.resolve(null);
-            const len = to.length;
-            for (let i = 0; i < this.bytes.length && i < len; i++) {
-              to[i] = this.bytes[i];
-            }
-            this.done = true;
-            return Promise.resolve(len);
-          }
-        }
-
-        interpreter.waitGroup.add(1);
-
-        (async function () {
-          const listener = Deno.listen({ hostname, port });
-
-          const connectionClass = new ObiClass(
-            "Connection",
-            null,
-            new Map<string, ObiFunction>(),
-          );
-
-          for await (const conn of listener) {
-            let closed = false;
-
-            class WriteString extends Callable {
-              arity(): number {
-                return 1;
-              }
-              call(interpreter: Interpreter, args: any[]): any {
-                if (closed) return;
-                const data = args[0];
-                const buf = (new TextEncoder()).encode(data);
-                try {
-                  Deno.copy(new R(buf), conn);
-                } catch (err) {
-                  console.log(err);
-                }
-              }
-            }
-            class Write extends Callable {
-              arity(): number {
-                return 1;
-              }
-              call(interpreter: Interpreter, args: any[]): any {
-                if (closed) return;
-                const data = args[0] as Bytes;
-                try {
-                  conn.write(data.bytes);
-                } catch (err) {
-                  console.log(err);
-                }
-              }
-            }
-
-            class OnData extends Callable {
-              arity(): number {
-                return 1;
-              }
-
-              call(interpreter: Interpreter, args: any[]): any {
-                const receiver = args[0];
-
-                (async function getData() {
-                  if (closed) return;
-                  try {
-                    const bytes = await readAllBytes(conn);
-                    receiver.call(interpreter, [new Bytes(bytes)]);
-                  } catch (err) {
-                    if (err.name === "Interrupted") {
-                      if (!closed) closed = true;
-                    } else {
-                      console.error("Unhandled read error", err);
-                    }
-                  }
-                })();
-              }
-            }
-
-            class Close extends Callable {
-              arity(): number {
-                return 0;
-              }
-
-              call(interpreter: Interpreter, args: any[]): any {
-                if (closed) return;
-                closed = true;
-                setTimeout(() => conn.close(), 0);
-              }
-            }
-
-            const connectionInstance = new ObiInstance(connectionClass);
-            connectionInstance.set(
-              new Token(TT.IDENTIFIER, "write_string", null, 0, 0),
-              new WriteString(),
-            );
-            connectionInstance.set(
-              new Token(TT.IDENTIFIER, "on_data", null, 0, 0),
-              new OnData(),
-            );
-            connectionInstance.set(
-              new Token(TT.IDENTIFIER, "close", null, 0, 0),
-              new Close(),
-            );
-            connectionInstance.set(
-              new Token(TT.IDENTIFIER, "write", null, 0, 0),
-              new Write(),
-            );
-
-            handler.call(interpreter, [connectionInstance]);
-          }
-
-          interpreter.waitGroup.done();
-        })();
-      }
-    }
-    class RtStr extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        return Interpreter.stringify(args[0]);
-      }
-    }
-    class RtStrlen extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const str = args[0];
-        if (typeof str !== "string") {
-          throw new RuntimeError({} as Token, "Invalid arg to strlen");
-        }
-        return str.length;
-      }
-    }
-    class RtLen extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const thing = args[0];
-        if (args[0] instanceof Bytes) {
-          return (args[0] as Bytes).bytes.length;
-        }
-        if ("length" in thing) {
-          return thing.length;
-        }
-        throw new RuntimeError({} as Token, "Invalid arg to len");
-      }
-    }
-    class RtStrslice extends Callable {
-      arity(): number {
-        return 3;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const str = args[0];
-        const start = args[1];
-        const end = args[2];
-        if (typeof str !== "string") {
-          throw new RuntimeError({} as Token, "Invalid arg to substr");
-        }
-        return str.substring(start, end);
-      }
-    }
-
-    class RtReadfile extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        try {
-          const contents = Deno.readTextFileSync(args[0]);
-          return contents;
-        } catch (err) {
-          if (err.name === "NotFound") {
-            return null;
-          }
-          throw new RuntimeError(
-            {} as Token,
-            `Failed to read '${args[0]}': ` + err.message,
-          );
-        }
-      }
-    }
-    class RtReadfileBytes extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        try {
-          const contents = Deno.readFileSync(args[0]);
-          return new Bytes(contents);
-        } catch (err) {
-          if (err.name === "NotFound") {
-            return null;
-          }
-          throw new RuntimeError(
-            {} as Token,
-            `Failed to read '${args[0]}': ` + err.message,
-          );
-        }
-      }
-    }
-    class RtProcessArgs extends Callable {
-      arity(): number {
-        return 0;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const runtimeArgs = Deno.args.slice(1);
-        const containerClass = new ObiClass(
-          "RtArgContainer",
-          null,
-          new Map<string, ObiFunction>(),
-        );
-        const container = new ObiInstance(containerClass);
-        for (let i = 0; i < runtimeArgs.length; i++) {
-          container.setDyn(
-            i,
-            runtimeArgs[i],
-            new Token(TT.NUMBER, "" + i, i, 0, 0),
-          );
-        }
-        container.set(
-          new Token(TT.STRING, "count", "count", 0, 0),
-          runtimeArgs.length,
-        );
-        return container;
-      }
-    }
-    class RtMod extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const location = path.join(path.dirname(ENTRY_FILE), args[0]);
-        const source = Deno.readTextFileSync(location);
-        const module = interpreter.loadModule(source);
-        return module;
-      }
-    }
-
-    class RtClock extends Callable {
-      arity(): number {
-        return 0;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        return Date.now();
-      }
-    }
-    class RtTextEncode extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const bytes = (new TextEncoder()).encode(args[0]);
-        return new Bytes(bytes);
-      }
-    }
-    class RtTextDecode extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        if (!(args[0] instanceof Bytes)) {
-          throw new RuntimeError(
-            {} as Token,
-            `text_decode called on "${typeof args[0]}"`,
-          );
-        }
-        return (new TextDecoder()).decode(args[0].bytes);
-      }
-    }
-    class RtBytesConcat extends Callable {
-      arity(): number {
-        return 2;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const a = args[0];
-        const b = args[1];
-        if (!(a instanceof Bytes && b instanceof Bytes)) {
-          throw new RuntimeError(
-            new Token(TT.IDENTIFIER, "bytes_concat", null, 0, 0),
-            "Expect both arguments to be Bytes",
-          );
-        }
-        const result = new Uint8Array(a.bytes.length + b.bytes.length);
-        for (let i = 0; i < a.bytes.length; i++) {
-          result[i] = a.bytes[i];
-        }
-        for (let j = 0; j < b.bytes.length; j++) {
-          result[a.bytes.length + j] = b.bytes[j];
-        }
-        return new Bytes(result);
-      }
-    }
-    class RtParseFloat extends Callable {
-      arity(): number {
-        return 1;
-      }
-      call(interpreter: Interpreter, args: any[]): any {
-        const v = Number.parseFloat(args[0]);
-        if (isNaN(v)) return null;
-        return v;
-      }
-    }
-
-    this.globals.define("clock", new RtClock());
-    this.globals.define("delay", new RtDelay());
-    this.globals.define("clearDelay", new RtClearDelay());
-    this.globals.define("type", new RtType());
-    this.globals.define("keys", new RtKeys());
-    this.globals.define("str", new RtStr());
-    this.globals.define("strlen", new RtStrlen());
-    this.globals.define("strslice", new RtStrslice());
-    this.globals.define("parse_float", new RtParseFloat());
-    this.globals.define("listen_tcp", new RtListenTcp());
-    this.globals.define("readfile", new RtReadfile());
-    this.globals.define("readfile_bytes", new RtReadfileBytes());
-    this.globals.define("bytes_concat", new RtBytesConcat());
-    this.globals.define("process_args", new RtProcessArgs());
-    this.globals.define("text_encode", new RtTextEncode());
-    this.globals.define("text_decode", new RtTextDecode());
-    this.globals.define("len", new RtLen());
-    this.globals.define("mod", new RtMod());
+  setEntryFile(entryFile: string) {
+    this.entryFile = entryFile;
   }
 
   loadModule(source: string): ObiInstance {
@@ -1410,10 +959,10 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
     for (const arg of exp.args) {
       args.push(this.evaluate(arg));
     }
-    if (!(callee instanceof Callable)) {
+    if (!("arity" in callee && "call" in callee)) {
       throw new RuntimeError(exp.paren, "Can only call functions.");
     }
-    const func = callee as Callable;
+    const func = callee as ObiCallable;
     if (args.length !== func.arity()) {
       throw new RuntimeError(
         exp.paren,
@@ -1586,26 +1135,6 @@ class Interpreter implements expr.Visitor<any>, stmt.Visitor<any> {
 
   getEnvironment(): Environment {
     return this.environment;
-  }
-}
-
-export class Pattern extends Callable {
-  expression: any;
-
-  constructor(expression: any) {
-    super();
-    this.expression = expression;
-  }
-  arity(): number {
-    return 1;
-  }
-
-  call(interpreter: Interpreter, args: any[]): any {
-    if (interpreter.isEqual(this.expression, args[0])) {
-      return true;
-    } else {
-      return false;
-    }
   }
 }
 
@@ -2454,7 +1983,7 @@ module Obi {
 
 const ENC = new TextEncoder();
 
-const MODULE_CLASS = new ObiClass(
+export const MODULE_CLASS = new ObiClass(
   "Module",
   null,
   new Map<string, ObiFunction>(),
@@ -2501,7 +2030,8 @@ async function run(source: string) {
 }
 
 async function runFile(file: string) {
-  ENTRY_FILE = file;
+  Obi.interpreter.setEntryFile(file);
+
   const contents = await Deno.readTextFile(file);
   run(contents);
 
