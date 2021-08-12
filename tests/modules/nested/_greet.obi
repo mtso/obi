@@ -1,11 +1,11 @@
-class Greeter {
-    init(name) {
-        this.name = name;
-    }
-    greet() {
-        print("Hello, " + this.getName());
-    }
-    getName() {
-        return this.name;
-    }
+pub fun Greeter(name) {
+    self := [];
+    self.name = name;
+    self.greet = fun() {
+        print("Hello, " + self.getName());
+    };
+    self.getName = fun() {
+        return self.name;
+    };
+    return self;
 }

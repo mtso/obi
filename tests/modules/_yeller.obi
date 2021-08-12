@@ -1,11 +1,20 @@
 greet := mod("./nested/_greet.obi");
 Greeter := greet.Greeter;
 
-class Yeller < Greeter {
-    greet() {
-        super.greet();
-    }
-    getName() {
-        return this.name + "!!!";
-    }
+// Demonstrates composition pattern.
+pub fun Yeller(name) {
+    self := [
+        greeter = Greeter(name),
+        greet = fun() {
+            return self.greeter.greet();
+        },
+    ];
+
+    // Overload greeter function by replacing it.
+    // _greeterGetName is a reference to the original function.
+    self._greeterGetName = self.greeter.getName;
+    self.greeter.getName = fun() {
+        return self._greeterGetName() + "!!!";
+    };
+    self;
 }

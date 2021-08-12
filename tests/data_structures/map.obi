@@ -1,9 +1,7 @@
 fun Map() {
-    _defined := [];
-    _items := [];
     self := [
-        defined = _defined,
-        items = _items,
+        defined = [],
+        items = [],
         get = fun(key) {
             return match (self.defined.(key)) {
                 true -> self.items.(key);
@@ -25,23 +23,23 @@ fun Map() {
             self.items.(key) = nil;
             self.defined.(key) = false;
         },
-        // keys() {
-        //     result := Object();
-        //     itemKeys := keys(this.items);
-        //     resultLen := 0;
-        //     i := 0; while() { i < itemKeys.len; } {
-        //         match (this.defined.(itemKeys.(i))) {
-        //             true -> {
-        //                 result.(resultLen) = itemKeys.(i);
-        //                 resultLen = resultLen + 1;
-        //             }
-        //             _ -> ();
-        //         };
-        //         i = i + 1;
-        //     };
-        //     result.("len") = resultLen;
-        //     return result;
-        // }
+        keys = fun() {
+            result := [];
+            itemKeys := keys(self.items);
+            resultLen := 0;
+            i := 0; while() { i < itemKeys.len; } {
+                match (self.defined.(itemKeys.(i))) {
+                    true -> {
+                        result.(resultLen) = itemKeys.(i);
+                        resultLen = resultLen + 1;
+                    }
+                    _ -> ();
+                };
+                i = i + 1;
+            };
+            result.("len") = resultLen;
+            return result;
+        }
     ];
     return self;
 }
@@ -52,12 +50,12 @@ m.set("bar", "baz");
 print(m.has("foo")); // expect: "true"
 print(m.get("foo")); // expect: "bar"
 
-// {
-//     k := m.keys();
-//     i := 0; while() { i < k.len; } {
-//         print(strlen(k.(i))); // Order is not guaranteed.
-//         i = i + 1;
-//     };
-//     // expect: "3"
-//     // expect: "3"
-// }
+{
+    k := m.keys();
+    i := 0; while() { i < k.len; } {
+        print(strlen(k.(i))); // Order is not guaranteed.
+        i = i + 1;
+    };
+    // expect: "3"
+    // expect: "3"
+}

@@ -48,31 +48,22 @@ const defineAst = (baseName: string, types: string[]) => {
   defineAst("Expr", [
     "Assign   = name: Token, value: Expr",
     "Binary   = left: Expr, operator: Token, right: Expr",
+    "Block    = expressions: Expr[]",
     "Call     = callee: Expr, paren: Token, args: Expr[]",
-    "GetDyn   = object: Expr, dot: Token, name: Expr",
     "Get      = object: Expr, name: Token",
+    "GetDyn   = object: Expr, dot: Token, name: Expr",
     "Set      = object: Expr, name: Token, value: Expr",
     "SetDyn   = object: Expr, dot: Token, name: Expr, value: Expr",
-    "Super    = keyword: Token, method: Token",
-    "This     = keyword: Token",
-    "Function = name: Token | null, parameters: Token[], body: stmt.Stmt[]",
+    "Function = name: Token | null, parameters: Token[], body: Expr[], publish: boolean",
     "Grouping = expression: Expr",
     "Literal  = value: any",
     "Match    = where: Token, against: Expr, cases: Case[]",
     "Logical  = left: Expr, operator: Token, right: Expr",
+    "Return   = keyword: Token, value: Expr | null",
     "Table    = values: Expr[]",
     "Unary    = operator: Token, right: Expr",
+    "Var      = name: Token, initializer: Expr, publish: boolean",
     "Variable = name: Token",
-  ]);
-  console.log(`}`);
-  console.log(`\nexport module stmt {
-  type Expr = expr.Expr;`);
-  defineAst("Stmt", [
-    "Block      = statements: Stmt[]",
-    "Class      = name: Token, superclass: expr.Variable | null, methods: expr.Function[]",
-    "Expression = expression: Expr",
-    "Return     = keyword: Token, value: Expr | null",
-    "Var        = name: Token, initializer: Expr",
   ]);
   console.log(`}`);
 }

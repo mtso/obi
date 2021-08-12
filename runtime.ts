@@ -1,10 +1,10 @@
 import {
-  Bytes,
   Interpreter,
   ObiCallable,
   ObiClass,
   ObiFunction,
   ObiInstance,
+  ObiTable,
   RuntimeError,
   Token,
   TT,
@@ -101,20 +101,34 @@ export class RtKeys implements ObiCallable {
     return 1;
   }
   call(interpreter: Interpreter, args: any[]): any {
-    const o = args[0] as ObiInstance;
-    const fields = o.getFields();
-    const array = new ObiInstance(this.obiArrayClass);
-    let i = 0;
-    for (const key of fields.keys()) {
-      array.setDyn(
-        i,
-        key,
-        new Token(TT.NUMBER, JSON.stringify(i), i, 0, 0),
-      );
-      i += 1;
+    if (args[0] instanceof ObiTable) {
+      const o = args[0] as ObiTable;
+      const array = new ObiTable();
+      let i = 0;
+      for (const key of o.getFields().keys()) {
+        array.setDyn(i, key);
+        i += 1;
+      }
+      array.setDyn("len", i);
+      return array;
+    } else if (args[0] instanceof ObiInstance) {
+      const o = args[0] as ObiInstance;
+      const fields = o.getFields();
+      const array = new ObiInstance(this.obiArrayClass);
+      let i = 0;
+      for (const key of fields.keys()) {
+        array.setDyn(
+          i,
+          key,
+          new Token(TT.NUMBER, JSON.stringify(i), i, 0, 0),
+        );
+        i += 1;
+      }
+      array.setDyn("len", i, new Token(TT.IDENTIFIER, "len", null, 0, 0));
+      return array;
+    } else {
+      throw new RuntimeError({} as Token, "Invalid type passed to 'keys'");
     }
-    array.setDyn("len", i, new Token(TT.IDENTIFIER, "len", null, 0, 0));
-    return array;
   }
 }
 
@@ -315,10 +329,7 @@ export class RtLen implements ObiCallable {
   }
   call(interpreter: Interpreter, args: any[]): any {
     const thing = args[0];
-    if (args[0] instanceof Bytes) {
-      return (args[0] as Bytes).bytes.length;
-    }
-    if ("length" in thing) {
+    if (thing && "length" in thing) {
       return thing.length;
     }
     throw new RuntimeError({} as Token, "Invalid arg to len");
@@ -394,9 +405,36 @@ export class RtMod implements ObiCallable {
     return 1;
   }
   call(interpreter: Interpreter, args: any[]): any {
+    if (args[0] === "builtins") {
+      return this.loadBuiltins();
+    }
     const location = path.join(path.dirname(interpreter.entryFile), args[0]);
     const source = Deno.readTextFileSync(location);
     const module = interpreter.loadModule(source);
+    return module;
+  }
+  loadBuiltins(): ObiTable {
+    const module = new ObiTable();
+    module.setDyn("print", new Print());
+    module.setDyn("clock", new RtClock());
+    module.setDyn("delay", new RtDelay());
+    module.setDyn("clearDelay", new RtClearDelay());
+    module.setDyn("type", new RtType());
+    module.setDyn("keys", new RtKeys());
+    module.setDyn("str", new RtStr());
+    module.setDyn("strlen", new RtStrlen());
+    module.setDyn("strslice", new RtStrslice());
+    module.setDyn("parse_float", new RtParseFloat());
+    module.setDyn("listen_tcp", new RtListenTcp());
+    module.setDyn("readfile", new RtReadfile());
+    module.setDyn("readfile_bytes", new RtReadfileBytes());
+    module.setDyn("bytes_concat", new RtBytesConcat());
+    module.setDyn("process_args", new RtProcessArgs());
+    module.setDyn("text_encode", new RtTextEncode());
+    module.setDyn("text_decode", new RtTextDecode());
+    module.setDyn("len", new RtLen());
+    module.setDyn("mod", new RtMod());
+    module.setDyn("load_wasm", new RtLoadWasm());
     return module;
   }
 }
@@ -426,7 +464,7 @@ export class RtTextDecode implements ObiCallable {
     if (!(args[0] instanceof Uint8Array)) {
       throw new RuntimeError(
         {} as Token,
-        `text_decode2 called on "${typeof args[0]}"`,
+        `text_decode called on "${typeof args[0]}"`,
       );
     }
     return (new TextDecoder()).decode(args[0]);
@@ -441,7 +479,7 @@ export class RtBytesConcat implements ObiCallable {
     const b = args[1];
     if (!(a instanceof Uint8Array && b instanceof Uint8Array)) {
       throw new RuntimeError(
-        new Token(TT.IDENTIFIER, "bytes_concat2", null, 0, 0),
+        new Token(TT.IDENTIFIER, "bytes_concat", null, 0, 0),
         "Expect both arguments to be byte arrays.",
       );
     }
@@ -495,7 +533,7 @@ export class RtLoadWasm implements ObiCallable {
     for (const key of keys) {
       if (key === "memory") {
         const memory = wasmInstance.exports[key] as WebAssembly.Memory;
-        const view = new Bytes(new Uint8Array(memory.buffer));
+        const view = new Uint8Array(memory.buffer);
         obiWasmInstance.setDyn(
           key,
           view,

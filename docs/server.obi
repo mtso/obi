@@ -1,10 +1,8 @@
-print("Starting server on port 8080");
-
-class HttpRequest {
-    init(method, path) {
-        this.method = method;
-        this.path = path;
-    }
+fun HttpRequest(method, path) {
+    return [
+        method = method,
+        path = path,
+    ];
 }
 
 fun split(source, needle) {
@@ -12,7 +10,7 @@ fun split(source, needle) {
     len := strlen(source);
     start := 0;
     end := 0;
-    pieces := Object();
+    pieces := [];
     pieceIdx := 0;
 
     i := 0; while() { i < len - needleLen + 1; } {
@@ -31,7 +29,7 @@ fun split(source, needle) {
     };
 
     pieces.(pieceIdx) = strslice(source, start, len);
-    pieces.("len") = pieceIdx;
+    pieces.len = pieceIdx;
     return pieces;
 }
 
@@ -43,6 +41,8 @@ fun parse_http(data) {
     path := meta.(1);
     return HttpRequest(method, path);
 }
+
+print("Starting server on port 8080");
 
 listen_tcp("0.0.0.0", 8080) fun (connection) {
     connection.on_data() fun (data) {

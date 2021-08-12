@@ -54,18 +54,27 @@
     h2 {
       margin-top: 2em;
     }
+
+    .title {
+      color: black;
+    }
+    .title {
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
   <div class="content">
     <div class="content_container">
-    <h1>🎗 Obi</h1>
+    <a href="/" class="title">
+      <h1>🎗 Obi</h1>
+    </a>
     <p>Obi is an experimental programming language.</p>
     <p>Noteworthy features:
       <ul>
         <li>Trailing lambdas</li>
         <li>Match expressions for control flow</li>
-        <li>Classes and dynamic property access</li>
+        <li>Dynamic associative arrays</li>
       </ul>
     </p>
     <div class="call_to_action_container">
@@ -79,20 +88,53 @@
 
     <h2>Examples</h2>
 
+    <h3>Dragon Turns</h3>
+    <pre class="code">
+fun dragon(n) {
+    fun dragon'(n, turn) {
+        match n <= 0 {
+            true -> return turn;
+            _ -> ();
+        };
+        dragon'(n - 1, "R") + turn + dragon'(n - 1, "L");
+    }
+
+    return dragon'(n, "");
+}
+
+print(dragon(5));
+// expect: "RRLRRLLRRRLLRLLRRRLRRLLLRRLLRLLRRLRRLLRRRLLRLLLRRLRRLLLRRLLRLL"
+</pre>
+
+    <h3>Adder</h3>
+    <pre class="code">
+fun add(x) {
+    return fun(y) {
+        return x + y;
+    };
+}
+
+print(add(1)(2)); // expect: "3"
+</pre>
+
     <h3>List/Each</h3>
     <pre class="code">
-class List {
-    init() {
-        this._items = Object();
-        this.len = 0;
-    }
-    add(item) {
-        this._items.(this.len) = item;
-        this.len = this.len + 1;
-    }
-    get(i) {
-        return this._items.(i);
-    }
+fun List() {
+    self := [
+        items = [],
+        len = 0,
+        add = fun(item) {
+            self.items.(self.len) = item;
+            self.len = self.len + 1;
+        },
+        get = fun(i) {
+            return self.items.(i);
+        },
+        size = fun() {
+            return self.len;
+        },
+    ];
+    return self;
 }
 
 fun while(p, f) {
@@ -125,30 +167,26 @@ each(nums) fun(n) {
 
     <h3>DSL</h3>
     <pre class="code">
-class Markup {
-    init() {
-        this.buf = "";
-    }
-
-    text(string) {
-        this.buf = this.buf + "&lt;text>" + string + "&lt;/text>";
-    }
-
-    body(children) {
-        this.buf = this.buf + "&lt;body>";
-        children();
-        this.buf = this.buf + "&lt;/body>";
-    }
-
-    head(children) {
-        this.buf = this.buf + "&lt;head>";
-        children();
-        this.buf = this.buf + "&lt;/head>";
-    }
-
-    getMarkup() {
-        return this.buf;
-    }
+fun Markup() {
+    _buf := "";
+    return [
+        head = fun(children) {
+            _buf = _buf + "<head>";
+            children();
+            _buf = _buf + "</head>";
+        },
+        body = fun(children) {
+            _buf = _buf + "<body>";
+            children();
+            _buf = _buf + "</body>";
+        },
+        text = fun(string) {
+            _buf = _buf + "<text>" + string + "</text>";
+        },
+        render = fun() {
+            return _buf;
+        },
+    ];
 }
 
 m := Markup();

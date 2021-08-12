@@ -9,20 +9,21 @@ export module expr {
   export type Visitor<T> = {
     visitAssignExpr: (exp: Assign) => T;
     visitBinaryExpr: (exp: Binary) => T;
+    visitBlockExpr: (exp: Block) => T;
     visitCallExpr: (exp: Call) => T;
-    visitGetDynExpr: (exp: GetDyn) => T;
     visitGetExpr: (exp: Get) => T;
+    visitGetDynExpr: (exp: GetDyn) => T;
     visitSetExpr: (exp: Set) => T;
     visitSetDynExpr: (exp: SetDyn) => T;
-    visitSuperExpr: (exp: Super) => T;
-    visitThisExpr: (exp: This) => T;
     visitFunctionExpr: (exp: Function) => T;
     visitGroupingExpr: (exp: Grouping) => T;
     visitLiteralExpr: (exp: Literal) => T;
     visitMatchExpr: (exp: Match) => T;
     visitLogicalExpr: (exp: Logical) => T;
+    visitReturnExpr: (exp: Return) => T;
     visitTableExpr: (exp: Table) => T;
     visitUnaryExpr: (exp: Unary) => T;
+    visitVarExpr: (exp: Var) => T;
     visitVariableExpr: (exp: Variable) => T;
   };
   export class Assign extends Expr {
@@ -53,6 +54,17 @@ export module expr {
       return visitor.visitBinaryExpr(this);
     }
   }
+  export class Block extends Expr {
+    expressions: Expr[];
+
+    constructor(expressions: Expr[]) {
+      super();
+      this.expressions = expressions;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitBlockExpr(this);
+    }
+  }
   export class Call extends Expr {
     callee: Expr;
     paren: Token;
@@ -68,6 +80,19 @@ export module expr {
       return visitor.visitCallExpr(this);
     }
   }
+  export class Get extends Expr {
+    object: Expr;
+    name: Token;
+
+    constructor(object: Expr, name: Token) {
+      super();
+      this.object = object;
+      this.name = name;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitGetExpr(this);
+    }
+  }
   export class GetDyn extends Expr {
     object: Expr;
     dot: Token;
@@ -81,19 +106,6 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitGetDynExpr(this);
-    }
-  }
-  export class Get extends Expr {
-    object: Expr;
-    name: Token;
-
-    constructor(object: Expr, name: Token) {
-      super();
-      this.object = object;
-      this.name = name;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitGetExpr(this);
     }
   }
   export class Set extends Expr {
@@ -128,40 +140,23 @@ export module expr {
       return visitor.visitSetDynExpr(this);
     }
   }
-  export class Super extends Expr {
-    keyword: Token;
-    method: Token;
-
-    constructor(keyword: Token, method: Token) {
-      super();
-      this.keyword = keyword;
-      this.method = method;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitSuperExpr(this);
-    }
-  }
-  export class This extends Expr {
-    keyword: Token;
-
-    constructor(keyword: Token) {
-      super();
-      this.keyword = keyword;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitThisExpr(this);
-    }
-  }
   export class Function extends Expr {
     name: Token | null;
     parameters: Token[];
-    body: stmt.Stmt[];
+    body: Expr[];
+    publish: boolean;
 
-    constructor(name: Token | null, parameters: Token[], body: stmt.Stmt[]) {
+    constructor(
+      name: Token | null,
+      parameters: Token[],
+      body: Expr[],
+      publish: boolean,
+    ) {
       super();
       this.name = name;
       this.parameters = parameters;
       this.body = body;
+      this.publish = publish;
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitFunctionExpr(this);
@@ -219,6 +214,19 @@ export module expr {
       return visitor.visitLogicalExpr(this);
     }
   }
+  export class Return extends Expr {
+    keyword: Token;
+    value: Expr | null;
+
+    constructor(keyword: Token, value: Expr | null) {
+      super();
+      this.keyword = keyword;
+      this.value = value;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitReturnExpr(this);
+    }
+  }
   export class Table extends Expr {
     values: Expr[];
 
@@ -243,6 +251,21 @@ export module expr {
       return visitor.visitUnaryExpr(this);
     }
   }
+  export class Var extends Expr {
+    name: Token;
+    initializer: Expr;
+    publish: boolean;
+
+    constructor(name: Token, initializer: Expr, publish: boolean) {
+      super();
+      this.name = name;
+      this.initializer = initializer;
+      this.publish = publish;
+    }
+    accept<T>(visitor: Visitor<T>): T {
+      return visitor.visitVarExpr(this);
+    }
+  }
   export class Variable extends Expr {
     name: Token;
 
@@ -252,87 +275,6 @@ export module expr {
     }
     accept<T>(visitor: Visitor<T>): T {
       return visitor.visitVariableExpr(this);
-    }
-  }
-}
-
-export module stmt {
-  type Expr = expr.Expr;
-  export abstract class Stmt {
-    abstract accept<T>(visitor: Visitor<T>): T;
-  }
-  export type Visitor<T> = {
-    visitBlockStmt: (exp: Block) => T;
-    visitClassStmt: (exp: Class) => T;
-    visitExpressionStmt: (exp: Expression) => T;
-    visitReturnStmt: (exp: Return) => T;
-    visitVarStmt: (exp: Var) => T;
-  };
-  export class Block extends Stmt {
-    statements: Stmt[];
-
-    constructor(statements: Stmt[]) {
-      super();
-      this.statements = statements;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitBlockStmt(this);
-    }
-  }
-  export class Class extends Stmt {
-    name: Token;
-    superclass: expr.Variable | null;
-    methods: expr.Function[];
-
-    constructor(
-      name: Token,
-      superclass: expr.Variable | null,
-      methods: expr.Function[],
-    ) {
-      super();
-      this.name = name;
-      this.superclass = superclass;
-      this.methods = methods;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitClassStmt(this);
-    }
-  }
-  export class Expression extends Stmt {
-    expression: Expr;
-
-    constructor(expression: Expr) {
-      super();
-      this.expression = expression;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitExpressionStmt(this);
-    }
-  }
-  export class Return extends Stmt {
-    keyword: Token;
-    value: Expr | null;
-
-    constructor(keyword: Token, value: Expr | null) {
-      super();
-      this.keyword = keyword;
-      this.value = value;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitReturnStmt(this);
-    }
-  }
-  export class Var extends Stmt {
-    name: Token;
-    initializer: Expr;
-
-    constructor(name: Token, initializer: Expr) {
-      super();
-      this.name = name;
-      this.initializer = initializer;
-    }
-    accept<T>(visitor: Visitor<T>): T {
-      return visitor.visitVarStmt(this);
     }
   }
 }

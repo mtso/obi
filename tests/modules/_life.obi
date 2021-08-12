@@ -1,9 +1,13 @@
-fun meaning() {
+pub fun meaning() {
     return 42;
 }
 
-class Life {
-    print() {
-        print("hi life");
-    }
+pub fun Life() {
+    return [
+        print = fun() {
+            print("hi life");
+        },
+    ];
 }
+
+pub health := 60;

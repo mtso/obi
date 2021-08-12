@@ -1,8 +1,8 @@
-class HttpRequest {
-    init(method, path) {
-        this.method = method;
-        this.path = path;
-    }
+fun HttpRequest(method, path) {
+    return [
+        method = method,
+        path = path,
+    ];
 }
 
 fun replaceAll(source, needle, with) {
@@ -34,7 +34,7 @@ fun split(source, needle) {
     len := strlen(source);
     start := 0;
     end := 0;
-    pieces := Object();
+    pieces := [];
     pieceIdx := 0;
 
     i := 0; while() { i < len - needleLen + 1; } {
@@ -53,7 +53,7 @@ fun split(source, needle) {
     };
 
     pieces.(pieceIdx) = strslice(source, start, len);
-    pieces.("len") = pieceIdx;
+    pieces.len = pieceIdx;
     return pieces;
 }
 
@@ -122,7 +122,8 @@ port := parse_float(args.(0));
 print("Starting server on port " + str(port));
 listen_tcp("0.0.0.0", port) fun (connection) {
     connection.on_data() fun (data) {
-        info := parse_http(text_decode(data));
+        data = text_decode(data);
+        info := parse_http(data);
         print("[" + str(clock()) + "] " + info.method + " " + info.path);
 
         filepath := makeRelative(info.path);
@@ -130,7 +131,6 @@ listen_tcp("0.0.0.0", port) fun (connection) {
             true -> filepath = info.path + "/index.html";
             _ -> ();
         };
-        contents := readfile_bytes("." + filepath);
 
         mime := match (fileExt(filepath)) {
             ".html" -> "text/html";
@@ -144,6 +144,7 @@ listen_tcp("0.0.0.0", port) fun (connection) {
             _ -> "text/plain";
         };
 
+        contents := readfile_bytes("." + filepath);
         match contents {
             nil -> {
                 message := "Path not found: " + info.path;

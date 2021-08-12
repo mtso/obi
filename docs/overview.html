@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+    html, body {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .content {
+      max-width: 700px;
+      margin: 0 auto 4em;
+      width: 100%;
+    }
+    .content_container {
+      /*width: 100%;*/
+      margin: 0.6em;
+    }
+
+    .code {
+      background-color: #F8F2ED;
+      padding: 1em;
+      overflow-x: scroll;
+    }
+
+    .call_to_action_container {
+      display: block;
+      margin-top: 1em;
+      margin-bottom: 2em;
+    }
+    .call_to_action {
+      font-weight: bold;
+      color: #E6B001; /*#D5921A;#E6B001*/
+      text-decoration: none;
+      padding-bottom: 2px;
+      border-bottom: 3px solid #E6B001; /*#D5921A;#E6B001*/
+    }
+    .call_to_action:hover {
+      font-weight: bold;
+      color: #D5921A; /*#D5921A;#E6B001*/
+      text-decoration: none;
+      padding-bottom: 2px;
+      border-bottom: 3px solid #D5921A; /*#D5921A;#E6B001*/
+    }
+
+    code {
+      background-color: #F8F2ED;
+      padding: 0.4em;
+    }
+    h2 {
+      margin-top: 2em;
+    }
+
+    .title {
+      color: black;
+    }
+    .title {
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <div class="content_container">
+    <a href="/" class="title">
+      <h1>🎗 Obi</h1>
+    </a>
+    <h2>Language Overview</h2>
+
+    <h3>Values</h3>
+    <pre class="code">
+123
+456.7
+"hello world"</pre>
+
+    <h3>Functions</h3>
+    <pre class="code">
+fun greet(name) {
+    print("Hello, " + name + "!");
+}
+
+greet("Obi");
+// expect: "Hello, Obi!"</pre>
+
+    <p>When a function is the last parameter of a call, the function can be defined outside of the parentheses.</p>
+    <pre class="code">
+fun give3(f) {
+    f(1);
+    f(2);
+    f(3);
+}
+
+give3() fun(n) {
+    print(n);
+};
+// expect: "1"
+// expect: "2"
+// expect: "3"
+// desugars to: give3(fun(n) { print(n); });</pre>
+
+    <p>When a function does not have parameters, the fun keyword can be omitted.</p>
+    <pre class="code">
+fun twice(f) {
+    f();
+    f();
+}
+
+twice() {
+    print("again");
+};
+// expect: "again"
+// expect: "again"
+// desugars to: twice(fun() { print("again"); });</pre>
+
+    <p><strong>Tail call optimization</strong> is implemented for functions where the last expression is a call to the defined function</p>
+    <pre class="code">
+fun fib(n) {
+    fun fib'(n, a, b) {
+        match n {
+            1 -> n;
+            0 -> n;
+            _ -> ();
+        }
+        fib'(n - 1, b, a + b);
+    }
+
+    fib'(n, n - 1, 0);
+}
+
+twice() {
+    print("again");
+};
+// expect: "again"
+// expect: "again"
+// desugars to: twice(fun() { print("again"); });</pre>
+
+    </div>
+  </div>
+</body>
+</html>

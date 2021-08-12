@@ -2,9 +2,8 @@ fun dragon(n) {
     fun dragon'(n, turn) {
         match n <= 0 {
             true -> return turn;
-            _ -> ();
+            _ -> dragon'(n - 1, "R") + turn + dragon'(n - 1, "L");
         };
-        dragon'(n - 1, "R") + turn + dragon'(n - 1, "L");
     }
 
     return dragon'(n, "");
