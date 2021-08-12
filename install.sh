@@ -22,12 +22,15 @@ else
   esac
 fi
 
-obi_uri="https://github.com/mtso/obi/archive/refs/tags/0.0.1.zip"
+if [ $# -eq 0 ]; then
+  obi_uri="https://github.com/mtso/obi/releases/latest/download/obi-${target}.zip"
+else
+  obi_uri="https://github.com/mtso/obi/releases/download/${1}/obi-${target}.zip"
+fi
 
 obi_install="${OBI_INSTALL:-$HOME/.obi}"
 bin_dir="$obi_install/bin"
 exe="$bin_dir/obi"
-sh_exe="$exe-0.0.1/obi"
 
 if [ ! -d "$bin_dir" ]; then
   mkdir -p "$bin_dir"
@@ -35,11 +38,10 @@ fi
 
 curl --fail --location --progress-bar --output "$exe.zip" "$obi_uri"
 unzip -d "$bin_dir" -o "$exe.zip"
-chmod +x "$sh_exe"
-# chmod +x "$exe"
+chmod +x "$exe"
 rm "$exe.zip"
 
-echo "Obi was installed successfully to $sh_exe"
+echo "Obi was installed successfully to $exe"
 if command -v obi >/dev/null; then
   echo "Usage: obi [path to obi file]"
   # echo "Run 'obi --help' to get started"
@@ -50,7 +52,7 @@ else
   esac
   echo "Manually add the directory to your \$HOME/$shell_profile (or similar)"
   echo "  export OBI_INSTALL=\"$obi_install\""
-  echo "  export PATH=\"\$OBI_INSTALL/bin/obi-0.0.1:\$PATH\""
+  echo "  export PATH=\"\$OBI_INSTALL/bin:\$PATH\""
   echo "Usage: obi [path to obi file]"
   # echo "Run '$exe --help' to get started"
 fi

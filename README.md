@@ -23,30 +23,26 @@ obi [path to obi file]
 ## A Taste of Obi
 
 ```
-class Markup {
-    init() {
-        this.buf = "";
-    }
-
-    text(string) {
-        this.buf = this.buf + "<text>" + string + "</text>";
-    }
-
-    body(children) {
-        this.buf = this.buf + "<body>";
-        children();
-        this.buf = this.buf + "</body>";
-    }
-
-    head(children) {
-        this.buf = this.buf + "<head>";
-        children();
-        this.buf = this.buf + "</head>";
-    }
-
-    getMarkup() {
-        return this.buf;
-    }
+fun Markup() {
+    _buf := "";
+    return [
+        head = fun(children) {
+            _buf = _buf + "<head>";
+            children();
+            _buf = _buf + "</head>";
+        },
+        body = fun(children) {
+            _buf = _buf + "<body>";
+            children();
+            _buf = _buf + "</body>";
+        },
+        text = fun(string) {
+            _buf = _buf + "<text>" + string + "</text>";
+        },
+        render = fun() {
+            return _buf;
+        },
+    ];
 }
 
 m := Markup();
@@ -61,7 +57,7 @@ head() {
     };
 };
 
-print(m.getMarkup());
+print(m.render());
 // expect: "<head><body><text>hi</text><text>bye</text></body></head>"
 ```
 
