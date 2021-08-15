@@ -324,6 +324,34 @@ export class RtLen implements ObiCallable {
   }
 }
 
+export class RtReadDir implements ObiCallable {
+  arity(): number {
+    return 1;
+  }
+  call(interpreter: Interpreter, args: any[]): any {
+    const path = args[0];
+    try {
+      const files = Deno.readDirSync(path);
+      const result = new ObiTable();
+      let resultLen = 0;
+      for (const file of files) {
+        const o = new ObiTable();
+        o.setDyn("name", file.name);
+        o.setDyn("isFile", file.isFile);
+        o.setDyn("isDirectory", file.isDirectory);
+        o.setDyn("isSymlink", file.isSymlink);
+        result.setDyn(resultLen, o);
+        resultLen += 1;
+      }
+      return result;
+    } catch (err) {
+      throw new RuntimeError(
+        {} as Token,
+        `Failed to read directory '${path}': ` + err.message,
+      );
+    }
+  }
+}
 export class RtWritefile implements ObiCallable {
   arity(): number {
     return 2;
@@ -817,23 +845,6 @@ function toJson(table: ObiTable): object {
   }
   return result;
 }
-
-// function toTable(json: any): ObiTable {
-//   const result = new ObiTable();
-//   if ()
-//   for (const k of Object.keys(json)) {
-//     const v = json[k];
-//     if (Array.isArray(v)) {
-//       let i = 0;
-//       for (const e of v) {
-//         result.setDyn(i++, e);
-//       }
-//     }
-//     if (typeof v === "object") {
-
-//     }
-//   }
-// }
 
 function parseHeaders(headers: Headers): ObiTable {
   const result = new ObiTable();

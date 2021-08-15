@@ -22,24 +22,26 @@ else
   esac
 fi
 
-if [ $# -eq 0 ]; then
-  obi_uri="https://github.com/mtso/obi/releases/latest/download/obi-${target}.zip"
-else
-  obi_uri="https://github.com/mtso/obi/releases/download/${1}/obi-${target}.zip"
-fi
+VERSION="0.2.1"
+obi_uri="https://github.com/mtso/obi/archive/refs/tags/$VERSION.zip"
 
 obi_install="${OBI_INSTALL:-$HOME/.obi}"
-bin_dir="$obi_install/bin"
-exe="$bin_dir/obi"
+tmp_dir="$obi_install/tmp"
+sdk_dir="$obi_install/sdk"
+bin_dir="$sdk_dir/bin"
+exe="$sdk_dir/bin/obi"
 
-if [ ! -d "$bin_dir" ]; then
-  mkdir -p "$bin_dir"
+rm -rf "$sdk_dir"
+if [ ! -d "$tmp_dir" ]; then
+  mkdir -p "$tmp_dir"
 fi
 
-curl --fail --location --progress-bar --output "$exe.zip" "$obi_uri"
-unzip -d "$bin_dir" -o "$exe.zip"
+curl --fail --location --progress-bar --output "$tmp_dir/source.zip" "$obi_uri"
+unzip -d "$tmp_dir" -o "$tmp_dir/source.zip"
+mv "$tmp_dir/obi-$VERSION" "$sdk_dir"
 chmod +x "$exe"
-rm "$exe.zip"
+rm "$tmp_dir/source.zip"
+rmdir "$tmp_dir"
 
 echo "Obi was installed successfully to $exe"
 if command -v obi >/dev/null; then
@@ -52,7 +54,7 @@ else
   esac
   echo "Manually add the directory to your \$HOME/$shell_profile (or similar)"
   echo "  export OBI_INSTALL=\"$obi_install\""
-  echo "  export PATH=\"\$OBI_INSTALL/bin:\$PATH\""
+  echo "  export PATH=\"\$OBI_INSTALL/sdk/bin:\$PATH\""
   echo "Usage: obi [path to obi file]"
   # echo "Run '$exe --help' to get started"
 fi

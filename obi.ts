@@ -71,7 +71,6 @@ export enum TokenType {
 
   // Keywords.
   AND,
-  CLASS,
   ELSE,
   FALSE,
   FUN,
@@ -83,8 +82,6 @@ export enum TokenType {
   OR,
   PUB,
   RETURN,
-  SUPER,
-  THIS,
   TRUE,
   VAR,
   TEE,
@@ -570,6 +567,7 @@ export class Interpreter implements expr.Visitor<any> {
     this.globals.define("strslice", new runtime.RtStrslice());
     this.globals.define("parse_float", new runtime.RtParseFloat());
     this.globals.define("listen_tcp", new runtime.RtListenTcp());
+    this.globals.define("readdir", new runtime.RtReadDir());
     this.globals.define("writefile", new runtime.RtWritefile());
     this.globals.define("readfile", new runtime.RtReadfile());
     this.globals.define("readfile_bytes", new runtime.RtReadfileBytes());
@@ -1462,7 +1460,6 @@ class Parser {
     while (!this.isAtEnd()) {
       if (this.previous().type == TT.SEMICOLON) return;
       switch (this.peek().type) {
-        case TT.CLASS:
         case TT.RETURN:
           return;
       }
@@ -1485,7 +1482,6 @@ class Scanner {
     const keywords = new Map<string, TokenType>();
     keywords.set("_", TT.UNDERSCORE);
     keywords.set("and", TT.AND);
-    keywords.set("class", TT.CLASS);
     keywords.set("else", TT.ELSE);
     keywords.set("false", TT.FALSE);
     keywords.set("for", TT.FOR);
