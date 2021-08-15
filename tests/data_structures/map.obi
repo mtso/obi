@@ -26,8 +26,9 @@ fun Map() {
         keys = fun() {
             result := [];
             itemKeys := keys(self.items);
+            size := len(self.items);
             resultLen := 0;
-            i := 0; while() { i < itemKeys.len; } {
+            i := 0; while() { i < size; } {
                 match (self.defined.(itemKeys.(i))) {
                     true -> {
                         result.(resultLen) = itemKeys.(i);
@@ -37,7 +38,6 @@ fun Map() {
                 };
                 i = i + 1;
             };
-            result.("len") = resultLen;
             return result;
         }
     ];
@@ -52,7 +52,8 @@ print(m.get("foo")); // expect: "bar"
 
 {
     k := m.keys();
-    i := 0; while() { i < k.len; } {
+    klen := len(k);
+    i := 0; while() { i < klen; } {
         print(strlen(k.(i))); // Order is not guaranteed.
         i = i + 1;
     };

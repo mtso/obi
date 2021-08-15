@@ -1,3 +1,0 @@
-l := List();
-l.add("1");
-print(l.get(0));

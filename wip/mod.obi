@@ -1,4 +1,0 @@
-life := mod("./life.obi")
-life2 := mod("package:_/whatevers")
-
-life.meaning(); // expect: "42"

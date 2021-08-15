@@ -206,3 +206,20 @@ Values
 - tables
 - byte arrays (no literal representation, must instantiate with
   new_buffer(<cap>))
+
+# testing?
+
+```obi
+pub fun __test__() {
+    test := mod("std/test.obi");
+    suite := test.new_suite();
+    suite.test("parses") fun(t) {
+        string := json.stringify([foo = "foo"]);
+        t.assertEquals("{\"foo\":\"foo\"}", string);
+    };
+    suite.testAsync("parses") fun(t) {
+        t.done();
+    };
+    suite.run();
+};
+```

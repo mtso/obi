@@ -53,7 +53,7 @@ fun split(source, needle) {
     };
 
     pieces.(pieceIdx) = strslice(source, start, len);
-    pieces.len = pieceIdx;
+    pieces.len = pieceIdx + 1;
     return pieces;
 }
 

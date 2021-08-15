@@ -1,5 +1,0 @@
-d := delay(2000, fun() {
-  print("bye");
-});
-// clearDelay(d);
-print("hi");

@@ -1,0 +1,8 @@
+odd_ := mod("./odd.obi");
+
+pub fun even(n) {
+    return match n {
+        0 -> true;
+        _ -> odd_.odd(n - 1);
+    };
+}

@@ -1,5 +1,6 @@
 import { delay as DenoDelay } from "https://deno.land/std@0.103.0/async/mod.ts";
 import * as path from "https://deno.land/std@0.103.0/path/mod.ts";
+import { createHash } from "https://deno.land/std@0.103.0/hash/mod.ts";
 
 import { expr } from "./ast.ts";
 import * as runtime from "./runtime.ts";
@@ -41,6 +42,7 @@ export enum TokenType {
   SEMICOLON,
   SLASH,
   STAR,
+  PERCENT,
   TILDE,
   UNDERSCORE,
 
@@ -209,26 +211,6 @@ export class ObiFunction implements ObiCallable {
     this.isInitializer = isInitializer;
     this.published = published;
   }
-  bind(instance: ObiInstance): ObiFunction {
-    const environment = new Environment(this.closure);
-    environment.define("this", instance);
-    return new ObiFunction(
-      this.declaration,
-      environment,
-      this.isInitializer,
-      this.published,
-    );
-  }
-  bindTable(instance: ObiTable): ObiFunction {
-    const environment = new Environment(this.closure);
-    environment.define("this", instance);
-    return new ObiFunction(
-      this.declaration,
-      environment,
-      this.isInitializer,
-      this.published,
-    );
-  }
   call(interpreter: Interpreter, args: any[]): any {
     const environment = new Environment(this.closure);
     for (let i = 0; i < this.declaration.parameters.length; i++) {
@@ -260,116 +242,22 @@ export class ObiFunction implements ObiCallable {
   }
 }
 
-enum ClassType {
-  NONE,
-  CLASS,
-  SUBCLASS,
-}
-
-export class ObiClass implements ObiCallable {
-  name: string;
-  where?: Token;
-  published?: boolean;
-  private methods: Map<string, ObiFunction>;
-  private superclass: ObiClass | null;
-  constructor(
-    name: string,
-    superclass: ObiClass | null,
-    methods: Map<string, ObiFunction>,
-    where?: Token,
-    published?: boolean,
-  ) {
-    this.name = name;
-    this.superclass = superclass;
-    this.methods = methods;
-    this.where = where;
-    this.published = published;
-  }
-  findMethod(name: string): ObiFunction | null {
-    if (this.methods.has(name)) {
-      return this.methods.get(name) as ObiFunction;
-    }
-    if (null !== this.superclass) {
-      return this.superclass.findMethod(name) as ObiFunction;
-    }
-    return null;
-  }
-  toString() {
-    return this.name;
-  }
-  call(interpreter: Interpreter, args: any[]): any {
-    const instance = new ObiInstance(this);
-    const initializer = this.findMethod("init");
-    if (null !== initializer) {
-      initializer.bind(instance).call(interpreter, args);
-    }
-    return instance;
-  }
-  arity(): number {
-    const initializer = this.findMethod("init");
-    if (null === initializer) {
-      return 0;
-    } else {
-      return initializer.arity();
-    }
-  }
-}
-
-export class ObiInstance {
-  klass: ObiClass;
-  private fields: Map<string, any> = new Map<string, any>();
-  constructor(klass: ObiClass) {
-    this.klass = klass;
-  }
-  toString() {
-    return this.klass.name + " instance";
-  }
-  get(name: Token): any {
-    if (this.fields.has(name.lexeme)) {
-      return this.fields.get(name.lexeme);
-    }
-    const method = this.klass.findMethod(name.lexeme);
-    if (null !== method) return method.bind(this);
-    throw new RuntimeError(name, `Undefined property '${name.lexeme}'.`);
-  }
-  getDyn(name: any, where: Token): any {
-    if (this.fields.has(name)) {
-      return this.fields.get(name);
-    }
-    const method = this.klass.findMethod(name);
-    if (null !== method) return method.bind(this);
-    return null;
-  }
-  set(name: Token, value: any) {
-    this.fields.set(name.lexeme, value);
-  }
-  setDyn(name: any, value: any, where: Token): any {
-    this.fields.set(name, value);
-  }
-
-  getFields(): Map<string, any> {
-    return this.fields;
-  }
-}
-
 export class ObiTable {
   private fields: Map<string, any> = new Map<string, any>();
   toString() {
-    return "<table>";
+    let f = "";
+    for (const k of this.fields.keys()) {
+      f += `${k}:${this.fields.get(k)};`;
+    }
+    return `<table (${f})>`;
+    // return "<table>";
   }
   get(name: Token): any {
     return this.getDyn(name.lexeme);
   }
   getDyn(name: any): any {
     if (this.fields.has(name)) {
-      const value = this.fields.get(name);
-      // Adds "this" recognition to functions on tables,
-      // but in return the scopes must be matched (and fixed);
-      // if (value instanceof ObiFunction) {
-      //   const method = value as ObiFunction;
-      //   return method.bindTable(this);
-      // }
-      return value;
+      return this.fields.get(name);
     }
     return null;
   }
@@ -403,7 +291,6 @@ class Resolver implements expr.Visitor<void> {
   private interpreter: Interpreter;
   private scopes: Map<string, boolean>[] = [];
   private currentFunction: FunctionType = FunctionType.NONE;
-  private currentClass: ClassType = ClassType.NONE;
 
   constructor(interpreter: Interpreter) {
     this.interpreter = interpreter;
@@ -623,8 +510,9 @@ fun Map() {
         keys = fun() {
             result := [];
             itemKeys := keys(self.items);
+            size := len(self.items);
             resultLen := 0;
-            i := 0; while() { i < itemKeys.len; } {
+            i := 0; while() { i < size; } {
                 match (self.defined.(itemKeys.(i))) {
                     true -> {
                         result.(resultLen) = itemKeys.(i);
@@ -634,7 +522,6 @@ fun Map() {
                 };
                 i = i + 1;
             };
-            result.("len") = resultLen;
             return result;
         }
     ];
@@ -666,28 +553,49 @@ export class Interpreter implements expr.Visitor<any> {
 
   waitGroup: WaitGroup = new WaitGroup();
   timers: Map<number, number> = new Map<number, number>();
+  modules: Map<string, ObiTable> = new Map<string, ObiTable>();
 
   constructor() {
     this.globals.define("mod", new runtime.RtMod());
-    this.globals.define("print", new runtime.Print());
+    this.globals.define("print", new runtime.RtPrint());
     this.globals.define("clock", new runtime.RtClock());
+    this.globals.define("random", new runtime.RtRandom());
     this.globals.define("delay", new runtime.RtDelay());
-    this.globals.define("clearDelay", new runtime.RtClearDelay());
+    this.globals.define("clear_delay", new runtime.RtClearDelay());
     this.globals.define("type", new runtime.RtType());
     this.globals.define("keys", new runtime.RtKeys());
     this.globals.define("str", new runtime.RtStr());
     this.globals.define("strlen", new runtime.RtStrlen());
+    this.globals.define("strcharcode", new runtime.RtStrcharcode());
     this.globals.define("strslice", new runtime.RtStrslice());
     this.globals.define("parse_float", new runtime.RtParseFloat());
     this.globals.define("listen_tcp", new runtime.RtListenTcp());
+    this.globals.define("writefile", new runtime.RtWritefile());
     this.globals.define("readfile", new runtime.RtReadfile());
     this.globals.define("readfile_bytes", new runtime.RtReadfileBytes());
     this.globals.define("bytes_concat", new runtime.RtBytesConcat());
-    this.globals.define("process_args", new runtime.RtProcessArgs());
     this.globals.define("text_encode", new runtime.RtTextEncode());
     this.globals.define("text_decode", new runtime.RtTextDecode());
     this.globals.define("len", new runtime.RtLen());
     this.globals.define("load_wasm", new runtime.RtLoadWasm());
+    this.globals.define("array_make", new runtime.RtArrayMake());
+    this.globals.define("atob", new runtime.RtAtob());
+    this.globals.define("btoa", new runtime.RtBtoa());
+    this.globals.define("fd_open", new runtime.RtFdOpen());
+    this.globals.define("fd_close", new runtime.RtFdClose());
+    this.globals.define("fd_seek", new runtime.RtFdSeek());
+    this.globals.define("fd_read", new runtime.RtFdRead());
+    this.globals.define("fd_write", new runtime.RtFdWrite());
+    this.globals.define("fd_fdatasync", new runtime.RtFdFdatasync());
+    this.globals.define("fd_size", new runtime.RtFdSize());
+    this.globals.define("file_exists", new runtime.RtFileExists());
+    this.globals.define("ensure_dir", new runtime.RtEnsureDir());
+    this.globals.define("fetch", new runtime.RtFetch());
+    this.globals.define("process_args", new runtime.RtProcessArgs());
+    this.globals.define("process_exit", new runtime.RtProcessExit());
+    this.globals.define("process_run", new runtime.RtProcessRun());
+    this.globals.define("process_env", new runtime.RtProcessEnv());
+    this.globals.define("list_sort", new runtime.RtListSort());
   }
 
   setEntryFile(entryFile: string) {
@@ -695,7 +603,12 @@ export class Interpreter implements expr.Visitor<any> {
   }
 
   loadModule(source: string): ObiTable {
+    const key = createHash("md5").update(source).toString();
+    const cached = this.modules.get(key);
+    if (cached) return cached;
+
     const module = new ObiTable();
+    this.modules.set(key, module);
 
     const scanner = new Scanner(source);
     const tokens = scanner.scanTokens();
@@ -783,14 +696,11 @@ export class Interpreter implements expr.Visitor<any> {
     }
 
     const lastExpr = expressions[expressions.length - 1];
-    if (
-      !(lastExpr && lastExpr instanceof expr.Grouping &&
-        (lastExpr as expr.Grouping).expression instanceof expr.Call)
-    ) {
+    if (!(lastExpr instanceof expr.Call)) {
       return false;
     }
 
-    const lastCall = (lastExpr as expr.Grouping).expression as expr.Call;
+    const lastCall = lastExpr as expr.Call;
     if (lastCall.callee instanceof expr.Variable) {
       const varName = (lastCall.callee as expr.Variable).name;
       try {
@@ -846,6 +756,7 @@ export class Interpreter implements expr.Visitor<any> {
         if (typeof left === "string" && typeof right === "string") {
           return (left as string) + (right as string);
         }
+        console.log(left, right);
         throw new RuntimeError(
           exp.operator,
           "Operands must be two numbers or two strings.",
@@ -856,6 +767,9 @@ export class Interpreter implements expr.Visitor<any> {
       case TT.STAR:
         this.checkNumberOperands(exp.operator, left, right);
         return (left as number) * (right as number);
+      case TT.PERCENT:
+        this.checkNumberOperands(exp.operator, left, right);
+        return (left as number) % (right as number);
     }
     // Unreachable.
     return null;
@@ -872,7 +786,10 @@ export class Interpreter implements expr.Visitor<any> {
     for (const arg of exp.args) {
       args.push(this.evaluate(arg));
     }
-    if (!(callee && "arity" in callee && "call" in callee)) {
+    if (
+      !(callee && (typeof callee === "object") && "arity" in callee &&
+        "call" in callee)
+    ) {
       throw new RuntimeError(exp.paren, "Can only call functions.");
     }
     const func = callee as ObiCallable;
@@ -893,9 +810,6 @@ export class Interpreter implements expr.Visitor<any> {
   }
   visitGetExpr(exp: expr.Get): any {
     const object = this.evaluate(exp.object);
-    if (object instanceof ObiInstance) {
-      return (object as ObiInstance).get(exp.name);
-    }
     if (object instanceof ObiTable) {
       return (object as ObiTable).get(exp.name);
     }
@@ -912,9 +826,6 @@ export class Interpreter implements expr.Visitor<any> {
   visitGetDynExpr(exp: expr.GetDyn): any {
     const object = this.evaluate(exp.object);
     const name = this.evaluate(exp.name);
-    if (object instanceof ObiInstance) {
-      return (object as ObiInstance).getDyn(name, exp.dot);
-    }
     if (object instanceof ObiTable) {
       return (object as ObiTable).getDyn(name);
     }
@@ -950,21 +861,19 @@ export class Interpreter implements expr.Visitor<any> {
   }
   visitSetExpr(exp: expr.Set): any {
     const object = this.evaluate(exp.object);
-    if (!(object instanceof ObiInstance || object instanceof ObiTable)) {
+    if (!(object instanceof ObiTable)) {
       throw new RuntimeError(exp.name, "Only instances have fields.");
     }
     const value = this.evaluate(exp.value);
     if (object instanceof ObiTable) {
       (object as ObiTable).set(exp.name, value);
-    } else {
-      (object as ObiInstance).set(exp.name, value);
     }
     return value;
   }
   visitSetDynExpr(exp: expr.SetDyn): any {
     const object = this.evaluate(exp.object);
     if (
-      !(object instanceof ObiInstance || object instanceof ObiTable ||
+      !(object instanceof ObiTable ||
         object instanceof Uint8Array)
     ) {
       throw new RuntimeError(exp.dot, "Only instances have fields.");
@@ -973,8 +882,6 @@ export class Interpreter implements expr.Visitor<any> {
     const value = this.evaluate(exp.value);
     if (object instanceof ObiTable) {
       (object as ObiTable).setDyn(name, value);
-    } else if (object instanceof ObiInstance) {
-      (object as ObiInstance).setDyn(name, value, exp.dot);
     } else if ((object as any) instanceof Uint8Array) {
       if (typeof name === "number") {
         (object as Uint8Array)[name] = value;
@@ -1059,6 +966,7 @@ export class Interpreter implements expr.Visitor<any> {
 
   private checkNumberOperands(op: Token, left: any, right: any) {
     if (typeof left === "number" && typeof right === "number") return;
+    console.log(left, right, op);
     throw new RuntimeError(op, "Operands must be numbers.");
   }
 
@@ -1317,7 +1225,7 @@ class Parser {
 
   private factor(): Expr {
     let exp = this.unary();
-    while (this.match(TT.SLASH, TT.STAR)) {
+    while (this.match(TT.SLASH, TT.STAR, TT.PERCENT)) {
       const op = this.previous();
       const right = this.unary();
       exp = new expr.Binary(exp, op, right);
@@ -1364,6 +1272,7 @@ class Parser {
   }
 
   private call(): Expr {
+    // console.log(this.previous());
     let exp = this.primary();
     while (true) {
       if (this.match(TT.LEFT_PAREN)) {
@@ -1647,6 +1556,10 @@ class Scanner {
         this.addToken(TT.PLUS);
         this.column += 1;
         break;
+      case "%":
+        this.addToken(TT.PERCENT);
+        this.column += 1;
+        break;
       case ";":
         this.addToken(TT.SEMICOLON);
         this.column += 1;
@@ -1842,6 +1755,7 @@ class Scanner {
       ["\\n", "\n"],
       ["\\t", "\t"],
       ['\\"', '"'],
+      ["\\u001b", "\u001b"], // TODO(mtso): actually handle unicode
     ]);
     this.addTokenLiteral(TT.STRING, value);
     this.column += (this.current - this.start); // handles unicode poorly
@@ -1928,18 +1842,14 @@ module Obi {
   };
 
   export const runtimeError = (err: RuntimeError) => {
-    console.error(err.message + `\n[line ${err.token.line}]`);
+    console.error(
+      err.message + `\n[line ${err.token.line}:${err.token.column}]`,
+    );
     hadRuntimeError = true;
   };
 }
 
 const ENC = new TextEncoder();
-
-export const MODULE_CLASS = new ObiClass(
-  "Module",
-  null,
-  new Map<string, ObiFunction>(),
-);
 
 function loadPrelude(source: string) {
   const scanner = new Scanner(source);

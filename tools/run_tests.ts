@@ -37,7 +37,7 @@ function parseExpects(contents: string) {
 
 async function runTest(filename: string, contents: string): Promise<boolean> {
   const p = Deno.run({
-    cmd: ["deno", "run", "--allow-read", "obi.ts", filename],
+    cmd: ["deno", "run", "--allow-all", "--unstable", "obi.ts", filename],
     stdout: "piped",
     stderr: "piped",
   });

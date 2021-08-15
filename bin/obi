@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+script_dir=$(dirname "$0")
+deno run --quiet --allow-all --unstable ${script_dir}/../obi.ts $@
